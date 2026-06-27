@@ -1,0 +1,1 @@
+// Entry point migrated to index.ts (Phase 1 TypeScript migration)
