@@ -9,4 +9,5 @@ export const env = {
   JWT_ACCESS_EXPIRES_IN: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
   NODE_ENV: process.env.NODE_ENV ?? 'development',
+  CORS_ORIGIN: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
 }
