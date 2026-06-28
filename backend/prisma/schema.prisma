@@ -21,21 +21,22 @@ enum TrainingStatus {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  nombre    String
-  email     String    @unique
-  password  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  projects  Project[]
+  id            String         @id @default(cuid())
+  nombre        String
+  email         String         @unique
+  password      String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  projects      Project[]
+  refreshTokens RefreshToken[]
 }
 
 model Project {
   id           String        @id @default(cuid())
-  userId       String?
+  userId       String
   name         String
   description  String?
-  user         User?         @relation(fields: [userId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
   trainingJobs TrainingJob[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -56,4 +57,14 @@ model TrainingJob {
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
   project                 Project        @relation(fields: [projectId], references: [id])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
 }

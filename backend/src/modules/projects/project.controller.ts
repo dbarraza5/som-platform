@@ -1,21 +1,26 @@
 import { Request, Response } from 'express'
 import { projectService } from './project.service'
+import { success, error } from '../../utils/response'
 
 export const projectController = {
-  async getAll(_req: Request, res: Response) {
-    const projects = await projectService.getAll()
-    res.json({ data: projects })
+  async getAll(req: Request, res: Response) {
+    const projects = await projectService.getAll(req.user!.id)
+    success(res, { projects })
   },
 
   async create(req: Request, res: Response) {
     const { name, description } = req.body
 
     if (!name) {
-      res.status(400).json({ error: 'name is required' })
+      error(res, 'name is required', 400)
       return
     }
 
-    const project = await projectService.create({ name, description })
-    res.status(201).json({ data: project })
+    const project = await projectService.create({
+      name,
+      description,
+      userId: req.user!.id,
+    })
+    success(res, { project }, 201)
   },
 }

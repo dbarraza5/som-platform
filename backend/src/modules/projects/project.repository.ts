@@ -1,12 +1,20 @@
 import prisma from '../../database/prisma'
-import { Prisma } from '@prisma/client'
+
+type CreateProjectData = {
+  name: string
+  description?: string | null
+  userId: string
+}
 
 export const projectRepository = {
-  findAll() {
-    return prisma.project.findMany({ orderBy: { createdAt: 'desc' } })
+  findAllByUserId(userId: string) {
+    return prisma.project.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    })
   },
 
-  create(data: Prisma.ProjectCreateInput) {
+  create(data: CreateProjectData) {
     return prisma.project.create({ data })
   },
 }

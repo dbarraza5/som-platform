@@ -7,5 +7,5 @@ export function errorHandler(
   _next: NextFunction,
 ) {
   console.error(err.stack)
-  res.status(500).json({ error: err.message || 'Internal server error' })
+  res.status(500).json({ success: false, message: err.message || 'Internal server error' })
 }
