@@ -8,14 +8,14 @@ export const projectController = {
   },
 
   async create(req: Request, res: Response) {
-    const { nombre, descripcion, estado } = req.body
+    const { name, description } = req.body
 
-    if (!nombre) {
-      res.status(400).json({ error: 'nombre is required' })
+    if (!name) {
+      res.status(400).json({ error: 'name is required' })
       return
     }
 
-    const project = await projectService.create({ nombre, descripcion, estado })
+    const project = await projectService.create({ name, description })
     res.status(201).json({ data: project })
   },
 }
