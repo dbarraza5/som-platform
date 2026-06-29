@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "SOM Platform API",
-    "description": "# SOM Platform API\n\nColección oficial de la API de SOM Platform — plataforma SaaS para análisis de datos con redes neuronales SOM.\n\n## Autenticación\n\nLas rutas protegidas usan **Bearer Token** (JWT de acceso). El token se guarda automáticamente en el environment al hacer login y se borra al hacer logout.\n\n## Variables de entorno\n\n| Variable | Descripción | Ejemplo |\n|---|---|---|\n| `baseUrl` | URL base del backend | `http://localhost:3000/api` |\n| `accessToken` | JWT de acceso (TTL 15 min) | Se llena automáticamente tras login |\n| `refreshToken` | JWT de refresco (TTL 7 días) | Se llena automáticamente tras login |\n| `currentProjectId` | ID del proyecto activo | Se llena automáticamente tras crear proyecto |\n\n## Flujo recomendado de prueba\n\n1. **Register** → crear usuario\n2. **Login** → obtener tokens (se guardan automáticamente)\n3. **Create Project** → crear proyecto (el ID se guarda automáticamente)\n4. **List Projects** → verificar listado\n5. **Get Project** → verificar detalle\n6. **Update Project** → modificar\n7. **Delete Project** → eliminar\n8. **Logout** → revocar tokens",
+    "description": "# SOM Platform API\n\nColección oficial de la API de SOM Platform — plataforma SaaS para análisis de datos con redes neuronales SOM.\n\n## Autenticación\n\nLas rutas protegidas usan **Bearer Token** (JWT de acceso). El token se guarda automáticamente en el environment al hacer login y se borra al hacer logout.\n\n## Variables de entorno\n\n| Variable | Descripción | Ejemplo |\n|---|---|---|\n| `baseUrl` | URL base del backend | `http://localhost:3000/api` |\n| `accessToken` | JWT de acceso (TTL 15 min) | Se llena automáticamente tras login |\n| `refreshToken` | JWT de refresco (TTL 7 días) | Se llena automáticamente tras login |\n| `currentProjectId` | ID del proyecto activo | Se llena automáticamente tras crear proyecto |\n| `currentDatasetId` | ID del dataset activo | Se llena automáticamente tras crear dataset |\n\n## Flujo recomendado de prueba\n\n1. **Register** → crear usuario\n2. **Login** → obtener tokens (se guardan automáticamente)\n3. **Create Project** → crear proyecto (el ID se guarda automáticamente)\n4. **Create Dataset** → crear dataset (el ID se guarda automáticamente)\n5. **List Datasets** → verificar listado\n6. **Get Dataset** → verificar detalle\n7. **Update Dataset** → modificar\n8. **Delete Dataset** → eliminar\n9. **Logout** → revocar tokens",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -383,9 +383,109 @@
     },
     {
       "name": "Datasets",
-      "description": "Gestión de datasets CSV. **No implementado aún** — placeholder para fases futuras.",
+      "description": "CRUD de datasets asociados a un proyecto. Todos los endpoints requieren autenticación.\n\nEn esta fase los datasets son recursos lógicos (sin archivo adjunto). Los campos de archivo se completarán en la Fase 6.3.",
       "_postman_id": "f4000000-0000-0000-0000-000000000001",
-      "item": []
+      "item": [
+        {
+          "name": "List Datasets",
+          "_postman_id": "f4000000-0000-0000-0000-000000000002",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{currentProjectId}}/datasets",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{currentProjectId}}", "datasets"]
+            },
+            "description": "## Listar datasets de un proyecto\n\nRetorna todos los datasets del proyecto especificado, ordenados por fecha de creación descendente.\n\n**Requiere autenticación.** El usuario debe ser propietario del proyecto.\n\n### Parámetros de ruta\n\n| Parámetro | Descripción |\n|---|---|\n| `projectId` | ID del proyecto (usa `{{currentProjectId}}`) |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"datasets\": [\n      {\n        \"id\": \"clxxxxxx\",\n        \"projectId\": \"clxxxxxx\",\n        \"name\": \"Clientes 2025\",\n        \"description\": \"Versión inicial\",\n        \"originalFilename\": null,\n        \"storageKey\": null,\n        \"fileSize\": null,\n        \"rows\": null,\n        \"columns\": null,\n        \"uploadedAt\": null,\n        \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-29T00:00:00.000Z\"\n      }\n    ]\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "Get Dataset",
+          "_postman_id": "f4000000-0000-0000-0000-000000000003",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/datasets/{{currentDatasetId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasets", "{{currentDatasetId}}"]
+            },
+            "description": "## Obtener dataset por ID\n\nRetorna el detalle completo de un dataset. Los campos de archivo estarán en `null` hasta la Fase 6.3.\n\n**Requiere autenticación.** El usuario debe ser propietario del proyecto al que pertenece el dataset.\n\n### Parámetros de ruta\n\n| Parámetro | Descripción |\n|---|---|\n| `id` | ID del dataset (usa `{{currentDatasetId}}`) |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"dataset\": {\n      \"id\": \"clxxxxxx\",\n      \"projectId\": \"clxxxxxx\",\n      \"name\": \"Clientes 2025\",\n      \"description\": \"Versión inicial\",\n      \"originalFilename\": null,\n      \"storageKey\": null,\n      \"mimeType\": null,\n      \"fileSize\": null,\n      \"rows\": null,\n      \"columns\": null,\n      \"uploadedAt\": null,\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-29T00:00:00.000Z\",\n      \"project\": { \"id\": \"clxxxxxx\", \"name\": \"Mi Proyecto\" }\n    }\n  }\n}\n```\n\n### Error (404)\n```json\n{ \"success\": false, \"message\": \"Dataset not found\" }\n```\n\n### Error (403)\n```json\n{ \"success\": false, \"message\": \"Access denied\" }\n```"
+          }
+        },
+        {
+          "name": "Create Dataset",
+          "_postman_id": "f4000000-0000-0000-0000-000000000004",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data && json.data.dataset) {",
+                  "    pm.environment.set('currentDatasetId', json.data.dataset.id);",
+                  "    console.log('✅ currentDatasetId guardado:', json.data.dataset.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Clientes 2025\",\n  \"description\": \"Dataset inicial de clientes para segmentación SOM\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/{{currentProjectId}}/datasets",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", "{{currentProjectId}}", "datasets"]
+            },
+            "description": "## Crear dataset en un proyecto\n\nCrea un dataset lógico asociado al proyecto. En esta fase no se adjunta ningún archivo.\n\n> **Script automático:** el ID del dataset creado se guarda como `currentDatasetId` en el environment.\n\n**Requiere autenticación.** El usuario debe ser propietario del proyecto.\n\n### Parámetros de ruta\n\n| Parámetro | Descripción |\n|---|---|\n| `projectId` | ID del proyecto |\n\n### Parámetros (body)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `name` | string | ✅ | Nombre del dataset (mínimo 3 caracteres) |\n| `description` | string | ❌ | Descripción opcional |\n\n### Respuesta esperada (201)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"dataset\": {\n      \"id\": \"clxxxxxx\",\n      \"projectId\": \"clxxxxxx\",\n      \"name\": \"Clientes 2025\",\n      \"description\": \"Dataset inicial de clientes para segmentación SOM\",\n      \"originalFilename\": null,\n      \"storageKey\": null,\n      \"mimeType\": null,\n      \"fileSize\": null,\n      \"rows\": null,\n      \"columns\": null,\n      \"uploadedAt\": null,\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-29T00:00:00.000Z\"\n    }\n  }\n}\n```\n\n### Error (400) — Validación\n```json\n{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"errors\": [{ \"field\": \"name\", \"message\": \"name must be at least 3 characters\" }]\n}\n```\n\n### Error (404) — Proyecto no encontrado\n```json\n{ \"success\": false, \"message\": \"Project not found\" }\n```"
+          }
+        },
+        {
+          "name": "Update Dataset",
+          "_postman_id": "f4000000-0000-0000-0000-000000000005",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Clientes 2025 v2\",\n  \"description\": \"Descripción actualizada\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/datasets/{{currentDatasetId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasets", "{{currentDatasetId}}"]
+            },
+            "description": "## Actualizar dataset\n\nPermite modificar `name` y/o `description`. No permite modificar campos de archivo.\n\n**Requiere autenticación.** El usuario debe ser propietario del proyecto al que pertenece el dataset.\n\n### Parámetros (body) — todos opcionales\n\n| Campo | Tipo | Descripción |\n|---|---|---|\n| `name` | string | Nuevo nombre (mínimo 3 caracteres) |\n| `description` | string | Nueva descripción |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"dataset\": {\n      \"id\": \"clxxxxxx\",\n      \"name\": \"Clientes 2025 v2\",\n      \"description\": \"Descripción actualizada\",\n      \"updatedAt\": \"2026-06-29T01:00:00.000Z\"\n    }\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "Delete Dataset",
+          "_postman_id": "f4000000-0000-0000-0000-000000000006",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/datasets/{{currentDatasetId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasets", "{{currentDatasetId}}"]
+            },
+            "description": "## Eliminar dataset\n\nElimina el registro del dataset. En esta fase no existen archivos físicos.\n\n**Requiere autenticación.** El usuario debe ser propietario del proyecto al que pertenece el dataset.\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"message\": \"Dataset deleted successfully\",\n  \"data\": null\n}\n```\n\n### Error (404)\n```json\n{ \"success\": false, \"message\": \"Dataset not found\" }\n```\n\n### Error (403)\n```json\n{ \"success\": false, \"message\": \"Access denied\" }\n```"
+          }
+        }
+      ]
     },
     {
       "name": "Training Jobs",
