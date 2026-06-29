@@ -6,6 +6,11 @@ type CreateProjectData = {
   userId: string
 }
 
+type UpdateProjectData = {
+  name?: string
+  description?: string | null
+}
+
 export const projectRepository = {
   findAllByUserId(userId: string) {
     return prisma.project.findMany({
@@ -14,7 +19,19 @@ export const projectRepository = {
     })
   },
 
+  findById(id: string) {
+    return prisma.project.findUnique({ where: { id } })
+  },
+
   create(data: CreateProjectData) {
     return prisma.project.create({ data })
+  },
+
+  update(id: string, data: UpdateProjectData) {
+    return prisma.project.update({ where: { id }, data })
+  },
+
+  delete(id: string) {
+    return prisma.project.delete({ where: { id } })
   },
 }

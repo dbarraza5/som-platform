@@ -1,0 +1,409 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "SOM Platform API",
+    "description": "# SOM Platform API\n\nColección oficial de la API de SOM Platform — plataforma SaaS para análisis de datos con redes neuronales SOM.\n\n## Autenticación\n\nLas rutas protegidas usan **Bearer Token** (JWT de acceso). El token se guarda automáticamente en el environment al hacer login y se borra al hacer logout.\n\n## Variables de entorno\n\n| Variable | Descripción | Ejemplo |\n|---|---|---|\n| `baseUrl` | URL base del backend | `http://localhost:3000/api` |\n| `accessToken` | JWT de acceso (TTL 15 min) | Se llena automáticamente tras login |\n| `refreshToken` | JWT de refresco (TTL 7 días) | Se llena automáticamente tras login |\n| `currentProjectId` | ID del proyecto activo | Se llena automáticamente tras crear proyecto |\n\n## Flujo recomendado de prueba\n\n1. **Register** → crear usuario\n2. **Login** → obtener tokens (se guardan automáticamente)\n3. **Create Project** → crear proyecto (el ID se guarda automáticamente)\n4. **List Projects** → verificar listado\n5. **Get Project** → verificar detalle\n6. **Update Project** → modificar\n7. **Delete Project** → eliminar\n8. **Logout** → revocar tokens",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string",
+      "description": "URL base del backend"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Endpoints de estado del servidor. No requieren autenticación.",
+      "_postman_id": "f1000000-0000-0000-0000-000000000001",
+      "item": [
+        {
+          "name": "GET /health",
+          "_postman_id": "f1000000-0000-0000-0000-000000000002",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "## Verificar estado del servidor\n\nRetorna el estado actual del servidor y la marca de tiempo.\n\n**No requiere autenticación.**\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"status\": \"ok\",\n    \"timestamp\": \"2026-06-29T00:00:00.000Z\"\n  }\n}\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "description": "Gestión de autenticación: registro, login, refresh de tokens y logout.\n\nLos endpoints de esta carpeta **no requieren token** excepto `GET /auth/me`.",
+      "_postman_id": "f2000000-0000-0000-0000-000000000001",
+      "item": [
+        {
+          "name": "Register",
+          "_postman_id": "f2000000-0000-0000-0000-000000000002",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Juan Pérez\",\n  \"email\": \"juan@example.com\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "## Registrar nuevo usuario\n\nCrea una nueva cuenta de usuario en la plataforma.\n\n### Parámetros (body)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `nombre` | string | ✅ | Nombre completo del usuario |\n| `email` | string | ✅ | Email único válido |\n| `password` | string | ✅ | Contraseña mínimo 8 caracteres |\n\n### Respuesta esperada (201)\n```json\n{\n  \"success\": true,\n  \"message\": \"User registered successfully\",\n  \"data\": {\n    \"user\": {\n      \"id\": \"clxxxxxx\",\n      \"nombre\": \"Juan Pérez\",\n      \"email\": \"juan@example.com\",\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\"\n    }\n  }\n}\n```\n\n### Error (409) — Email ya registrado\n```json\n{\n  \"success\": false,\n  \"message\": \"Email already registered\"\n}\n```"
+          }
+        },
+        {
+          "name": "Login",
+          "_postman_id": "f2000000-0000-0000-0000-000000000003",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data) {",
+                  "    pm.environment.set('accessToken', json.data.accessToken);",
+                  "    pm.environment.set('refreshToken', json.data.refreshToken);",
+                  "    console.log('✅ Tokens guardados en el environment.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"juan@example.com\",\n  \"password\": \"secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "## Iniciar sesión\n\nAutentica al usuario y retorna un par de tokens JWT.\n\n> **Script automático:** al recibir respuesta exitosa, `accessToken` y `refreshToken` se guardan automáticamente en el environment.\n\n### Parámetros (body)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `email` | string | ✅ | Email registrado |\n| `password` | string | ✅ | Contraseña |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"user\": {\n      \"id\": \"clxxxxxx\",\n      \"nombre\": \"Juan Pérez\",\n      \"email\": \"juan@example.com\"\n    }\n  }\n}\n```\n\n### Error (401) — Credenciales inválidas\n```json\n{\n  \"success\": false,\n  \"message\": \"Invalid email or password\"\n}\n```"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "_postman_id": "f2000000-0000-0000-0000-000000000004",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data) {",
+                  "    pm.environment.set('accessToken', json.data.accessToken);",
+                  "    pm.environment.set('refreshToken', json.data.refreshToken);",
+                  "    console.log('✅ Tokens renovados y guardados en el environment.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "refresh"]
+            },
+            "description": "## Renovar access token\n\nEmite un nuevo par de tokens usando el `refreshToken` actual. El refresh token anterior queda revocado (rotación).\n\n> **Script automático:** los nuevos tokens se guardan automáticamente en el environment.\n\n### Parámetros (body)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `refreshToken` | string | ✅ | Refresh token vigente |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  }\n}\n```\n\n### Error (401) — Token inválido o expirado\n```json\n{\n  \"success\": false,\n  \"message\": \"Invalid or expired refresh token\"\n}\n```"
+          }
+        },
+        {
+          "name": "Logout",
+          "_postman_id": "f2000000-0000-0000-0000-000000000005",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.environment.unset('accessToken');",
+                  "    pm.environment.unset('refreshToken');",
+                  "    console.log('✅ Tokens eliminados del environment.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            },
+            "description": "## Cerrar sesión\n\nRevoca el refresh token en la base de datos. El access token expira naturalmente por su TTL.\n\n> **Script automático:** al recibir respuesta exitosa, `accessToken` y `refreshToken` se eliminan del environment.\n\n### Parámetros (body)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `refreshToken` | string | ✅ | Refresh token a revocar |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"message\": \"Logged out successfully\",\n  \"data\": null\n}\n```"
+          }
+        },
+        {
+          "name": "Me (current user)",
+          "_postman_id": "f2000000-0000-0000-0000-000000000006",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "## Obtener usuario autenticado\n\nRetorna los datos del usuario que corresponde al access token.\n\n**Requiere autenticación** (Bearer token heredado del nivel de colección).\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": {\n      \"id\": \"clxxxxxx\",\n      \"nombre\": \"Juan Pérez\",\n      \"email\": \"juan@example.com\",\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-29T00:00:00.000Z\"\n    }\n  }\n}\n```\n\n### Error (401) — Token inválido o ausente\n```json\n{\n  \"success\": false,\n  \"message\": \"Unauthorized\"\n}\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "description": "CRUD completo de proyectos. Todos los endpoints requieren autenticación.\n\nCada usuario solo puede ver y gestionar sus propios proyectos.",
+      "_postman_id": "f3000000-0000-0000-0000-000000000001",
+      "item": [
+        {
+          "name": "List Projects",
+          "_postman_id": "f3000000-0000-0000-0000-000000000002",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"]
+            },
+            "description": "## Listar proyectos del usuario\n\nRetorna todos los proyectos pertenecientes al usuario autenticado, ordenados por fecha de creación descendente.\n\n**Requiere autenticación.**\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"projects\": [\n      {\n        \"id\": \"clxxxxxx\",\n        \"name\": \"Análisis de Clientes\",\n        \"description\": \"Segmentación de clientes con SOM\",\n        \"userId\": \"clxxxxxx\",\n        \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n        \"updatedAt\": \"2026-06-29T00:00:00.000Z\"\n      }\n    ]\n  }\n}\n```"
+          }
+        },
+        {
+          "name": "Get Project",
+          "_postman_id": "f3000000-0000-0000-0000-000000000003",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{currentProjectId}}",
+                  "description": "ID del proyecto (cuid). Se llena automáticamente al crear un proyecto."
+                }
+              ]
+            },
+            "description": "## Obtener proyecto por ID\n\nRetorna el detalle de un proyecto específico. Solo el propietario puede acceder.\n\n**Requiere autenticación.**\n\n### Parámetros de ruta\n\n| Parámetro | Tipo | Descripción |\n|---|---|---|\n| `id` | string (cuid) | ID del proyecto |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"project\": {\n      \"id\": \"clxxxxxx\",\n      \"name\": \"Análisis de Clientes\",\n      \"description\": \"Segmentación de clientes con SOM\",\n      \"userId\": \"clxxxxxx\",\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-29T00:00:00.000Z\"\n    }\n  }\n}\n```\n\n### Error (404) — Proyecto no encontrado\n```json\n{\n  \"success\": false,\n  \"message\": \"Project not found\"\n}\n```\n\n### Error (403) — Sin acceso\n```json\n{\n  \"success\": false,\n  \"message\": \"Access denied\"\n}\n```"
+          }
+        },
+        {
+          "name": "Create Project",
+          "_postman_id": "f3000000-0000-0000-0000-000000000004",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.success && json.data && json.data.project) {",
+                  "    pm.environment.set('currentProjectId', json.data.project.id);",
+                  "    console.log('✅ currentProjectId guardado:', json.data.project.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Análisis de Clientes\",\n  \"description\": \"Segmentación de clientes con redes SOM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects"]
+            },
+            "description": "## Crear nuevo proyecto\n\nCrea un proyecto asociado al usuario autenticado.\n\n> **Script automático:** el ID del proyecto creado se guarda como `currentProjectId` en el environment.\n\n**Requiere autenticación.**\n\n### Parámetros (body)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `name` | string | ✅ | Nombre del proyecto (mínimo 3 caracteres) |\n| `description` | string | ❌ | Descripción opcional |\n\n### Respuesta esperada (201)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"project\": {\n      \"id\": \"clxxxxxx\",\n      \"name\": \"Análisis de Clientes\",\n      \"description\": \"Segmentación de clientes con redes SOM\",\n      \"userId\": \"clxxxxxx\",\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-29T00:00:00.000Z\"\n    }\n  }\n}\n```\n\n### Error (400) — Validación\n```json\n{\n  \"success\": false,\n  \"message\": \"Validation failed\",\n  \"errors\": [\n    { \"field\": \"name\", \"message\": \"name must be at least 3 characters\" }\n  ]\n}\n```"
+          }
+        },
+        {
+          "name": "Update Project",
+          "_postman_id": "f3000000-0000-0000-0000-000000000005",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Análisis de Clientes v2\",\n  \"description\": \"Descripción actualizada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{currentProjectId}}",
+                  "description": "ID del proyecto (cuid)"
+                }
+              ]
+            },
+            "description": "## Actualizar proyecto\n\nModifica el nombre y/o descripción de un proyecto existente. Solo el propietario puede actualizarlo.\n\n**Requiere autenticación.**\n\n### Parámetros de ruta\n\n| Parámetro | Tipo | Descripción |\n|---|---|---|\n| `id` | string (cuid) | ID del proyecto |\n\n### Parámetros (body) — todos opcionales\n\n| Campo | Tipo | Descripción |\n|---|---|---|\n| `name` | string | Nuevo nombre (mínimo 3 caracteres) |\n| `description` | string | Nueva descripción |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"project\": {\n      \"id\": \"clxxxxxx\",\n      \"name\": \"Análisis de Clientes v2\",\n      \"description\": \"Descripción actualizada\",\n      \"userId\": \"clxxxxxx\",\n      \"createdAt\": \"2026-06-29T00:00:00.000Z\",\n      \"updatedAt\": \"2026-06-29T01:00:00.000Z\"\n    }\n  }\n}\n```\n\n### Error (404) — Proyecto no encontrado\n```json\n{\n  \"success\": false,\n  \"message\": \"Project not found\"\n}\n```\n\n### Error (403) — Sin acceso\n```json\n{\n  \"success\": false,\n  \"message\": \"Access denied\"\n}\n```"
+          }
+        },
+        {
+          "name": "Delete Project",
+          "_postman_id": "f3000000-0000-0000-0000-000000000006",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/projects/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["projects", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{currentProjectId}}",
+                  "description": "ID del proyecto (cuid)"
+                }
+              ]
+            },
+            "description": "## Eliminar proyecto\n\nElimina permanentemente un proyecto. Solo el propietario puede eliminarlo.\n\n**Requiere autenticación.**\n\n### Parámetros de ruta\n\n| Parámetro | Tipo | Descripción |\n|---|---|---|\n| `id` | string (cuid) | ID del proyecto |\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"message\": \"Project deleted successfully\",\n  \"data\": null\n}\n```\n\n### Error (404) — Proyecto no encontrado\n```json\n{\n  \"success\": false,\n  \"message\": \"Project not found\"\n}\n```\n\n### Error (403) — Sin acceso\n```json\n{\n  \"success\": false,\n  \"message\": \"Access denied\"\n}\n```"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Datasets",
+      "description": "Gestión de datasets CSV. **No implementado aún** — placeholder para fases futuras.",
+      "_postman_id": "f4000000-0000-0000-0000-000000000001",
+      "item": []
+    },
+    {
+      "name": "Training Jobs",
+      "description": "Gestión de entrenamientos SOM. **No implementado aún** — placeholder para fases futuras.",
+      "_postman_id": "f5000000-0000-0000-0000-000000000001",
+      "item": []
+    },
+    {
+      "name": "Files",
+      "description": "Upload y descarga de archivos (S3). **No implementado aún** — placeholder para fases futuras.",
+      "_postman_id": "f6000000-0000-0000-0000-000000000001",
+      "item": []
+    },
+    {
+      "name": "Administration",
+      "description": "Administración de la plataforma. **No implementado aún** — placeholder para fases futuras.",
+      "_postman_id": "f7000000-0000-0000-0000-000000000001",
+      "item": []
+    }
+  ]
+}
