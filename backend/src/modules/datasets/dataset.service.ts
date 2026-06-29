@@ -1,6 +1,7 @@
 import { projectRepository } from '../projects/project.repository'
 import { datasetRepository } from './dataset.repository'
 import { getStorageProvider } from '../../storage'
+import { datasetAnalyzerService } from './dataset.analyzer'
 
 type CreateDatasetData = {
   name: string
@@ -63,12 +64,33 @@ export const datasetService = {
 
     await storage.save({ key, buffer: file.buffer, mimeType: file.mimetype })
 
-    return datasetRepository.updateFileMetadata(id, {
+    await datasetRepository.updateFileMetadata(id, {
       originalFilename: file.originalname,
       storageKey: key,
       mimeType: file.mimetype,
       fileSize: file.size,
       uploadedAt: new Date(),
     })
+
+    await datasetRepository.updateAnalysis(id, { analysisStatus: 'PROCESSING' })
+
+    try {
+      const stream = await storage.getReadStream(key)
+      const result = await datasetAnalyzerService.analyze(stream)
+      await datasetRepository.updateAnalysis(id, {
+        analysisStatus: 'COMPLETED',
+        rows: result.rows,
+        columns: result.columns,
+        analysisError: null,
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Analysis failed'
+      await datasetRepository.updateAnalysis(id, {
+        analysisStatus: 'FAILED',
+        analysisError: message,
+      })
+    }
+
+    return datasetRepository.findById(id)
   },
 }

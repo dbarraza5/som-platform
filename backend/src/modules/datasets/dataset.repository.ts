@@ -19,6 +19,13 @@ type UpdateFileMetadata = {
   uploadedAt: Date
 }
 
+type UpdateAnalysisData = {
+  analysisStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  rows?: number | null
+  columns?: number | null
+  analysisError?: string | null
+}
+
 export const datasetRepository = {
   findAllByProjectId(projectId: string) {
     return prisma.dataset.findMany({
@@ -47,6 +54,10 @@ export const datasetRepository = {
   },
 
   updateFileMetadata(id: string, data: UpdateFileMetadata) {
+    return prisma.dataset.update({ where: { id }, data })
+  },
+
+  updateAnalysis(id: string, data: UpdateAnalysisData) {
     return prisma.dataset.update({ where: { id }, data })
   },
 }

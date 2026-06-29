@@ -1,5 +1,7 @@
 import fs from 'fs/promises'
+import { createReadStream } from 'fs'
 import path from 'path'
+import type { Readable } from 'stream'
 import { IFileStorageProvider, SaveFileOptions } from './IFileStorageProvider'
 
 export class LocalFileStorageProvider implements IFileStorageProvider {
@@ -26,5 +28,9 @@ export class LocalFileStorageProvider implements IFileStorageProvider {
     } catch {
       return false
     }
+  }
+
+  async getReadStream(key: string): Promise<Readable> {
+    return createReadStream(this.resolve(key))
   }
 }

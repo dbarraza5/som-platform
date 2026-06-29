@@ -124,14 +124,26 @@ const schemas = {
       },
       mimeType: { type: ['string', 'null'], example: 'text/csv' },
       fileSize: { type: ['integer', 'null'], example: 204800 },
-      rows: { type: ['integer', 'null'], example: null },
-      columns: { type: ['integer', 'null'], example: null },
+      rows: { type: ['integer', 'null'], example: 1000, description: 'Filas de datos (excluye la cabecera). Null hasta que se complete el análisis.' },
+      columns: { type: ['integer', 'null'], example: 8, description: 'Cantidad de columnas detectadas en la cabecera.' },
       uploadedAt: { type: ['string', 'null'], format: 'date-time' },
+      analysisStatus: {
+        type: 'string',
+        enum: ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'],
+        example: 'COMPLETED',
+        description: 'Estado del análisis automático del CSV. PENDING: sin archivo. PROCESSING: analizando. COMPLETED: éxito. FAILED: error.',
+      },
+      analysisError: {
+        type: ['string', 'null'],
+        example: null,
+        description: 'Mensaje de error si analysisStatus es FAILED, null en otro caso.',
+      },
       createdAt: { type: 'string', format: 'date-time' },
       updatedAt: { type: 'string', format: 'date-time' },
     },
     required: ['id', 'projectId', 'name', 'description', 'originalFilename', 'storageKey',
-      'mimeType', 'fileSize', 'rows', 'columns', 'uploadedAt', 'createdAt', 'updatedAt'],
+      'mimeType', 'fileSize', 'rows', 'columns', 'uploadedAt', 'analysisStatus',
+      'analysisError', 'createdAt', 'updatedAt'],
   },
 
   RegisterBody: {
@@ -638,7 +650,7 @@ const datasets = {
     post: {
       tags: ['Datasets'],
       summary: 'Subir archivo CSV',
-      description: 'Sube un archivo CSV al dataset. Si ya existía un archivo, el anterior se elimina y es reemplazado. La clave de almacenamiento sigue el patrón `projects/{projectId}/datasets/{id}/original.csv`.',
+      description: 'Sube un archivo CSV al dataset. Tras guardar el archivo, el sistema realiza automáticamente un análisis básico del contenido (streaming): valida estructura, cuenta filas de datos y columnas, y actualiza `analysisStatus`. Si ya existía un archivo, el anterior se elimina y es reemplazado. La clave de almacenamiento sigue el patrón `projects/{projectId}/datasets/{id}/original.csv`.',
       requestBody: {
         required: true,
         content: {
@@ -666,7 +678,7 @@ const datasets = {
               example: {
                 success: true,
                 data: {
-                  dataset: { id: 'cm1xyz', projectId: 'cm1abc', name: 'Clientes 2025', description: null, originalFilename: 'clientes_2025.csv', storageKey: 'projects/cm1abc/datasets/cm1xyz/original.csv', mimeType: 'text/csv', fileSize: 204800, rows: null, columns: null, uploadedAt: '2026-01-01T00:00:00.000Z', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+                  dataset: { id: 'cm1xyz', projectId: 'cm1abc', name: 'Clientes 2025', description: null, originalFilename: 'clientes_2025.csv', storageKey: 'projects/cm1abc/datasets/cm1xyz/original.csv', mimeType: 'text/csv', fileSize: 204800, rows: 1000, columns: 8, uploadedAt: '2026-01-01T00:00:00.000Z', analysisStatus: 'COMPLETED', analysisError: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
                 },
               },
             },
