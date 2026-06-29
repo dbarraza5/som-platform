@@ -55,6 +55,16 @@ som-platform/
 
 See [docs/architecture.md](docs/architecture.md) for a full description of each service, the system flow, and the planned AWS mapping.
 
+## API Documentation
+
+Interactive API documentation is available at:
+
+**http://localhost:3000/api/docs**
+
+Powered by [Scalar](https://scalar.com) with an OpenAPI 3.1 spec. Covers all implemented endpoints with request/response examples, authentication, and a built-in HTTP client to execute requests directly from the browser.
+
+The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.json`.
+
 ## Current Phase
 
-**Phase 0** — Development environment only. No business logic implemented.
+**Phase 6** — Authentication, project CRUD, dataset CRUD, and CSV file upload implemented.
