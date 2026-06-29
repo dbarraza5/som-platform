@@ -8,13 +8,8 @@ datasource db {
 }
 
 enum TrainingStatus {
-  UPLOADING_CSV
-  CSV_UPLOADED
-  NORMALIZING
-  NORMALIZED
-  WAITING_FOR_WORKER
-  TRAINING
-  GENERATING_RESULTS
+  PENDING
+  RUNNING
   COMPLETED
   FAILED
   CANCELLED
@@ -32,31 +27,56 @@ model User {
 }
 
 model Project {
-  id           String        @id @default(cuid())
-  userId       String
-  name         String
-  description  String?
-  user         User          @relation(fields: [userId], references: [id])
-  trainingJobs TrainingJob[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  user        User      @relation(fields: [userId], references: [id])
+  datasets    Dataset[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Dataset {
+  id               String        @id @default(cuid())
+  projectId        String
+  name             String
+  description      String?
+  originalFilename String?
+  storageKey       String?
+  mimeType         String?
+  fileSize         Int?
+  rows             Int?
+  columns          Int?
+  uploadedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  project          Project       @relation(fields: [projectId], references: [id])
+  trainingJobs     TrainingJob[]
 }
 
 model TrainingJob {
-  id                      String         @id @default(cuid())
-  projectId               String
-  status                  TrainingStatus @default(WAITING_FOR_WORKER)
-  progress                Int            @default(0)
-  csvUploadedAt           DateTime?
-  normalizationStartedAt  DateTime?
-  normalizationFinishedAt DateTime?
-  trainingStartedAt       DateTime?
-  trainingFinishedAt      DateTime?
-  finishedAt              DateTime?
-  errorMessage            String?
-  createdAt               DateTime       @default(now())
-  updatedAt               DateTime       @updatedAt
-  project                 Project        @relation(fields: [projectId], references: [id])
+  id                       String         @id @default(cuid())
+  datasetId                String
+  name                     String
+  description              String?
+  status                   TrainingStatus @default(PENDING)
+  progress                 Int            @default(0)
+  gridWidth                Int
+  gridHeight               Int
+  alpha                    Float
+  beta                     Float
+  neighborhoodRadius       Float
+  objectiveDimensionWeight Float
+  useLogarithmicForget     Boolean        @default(false)
+  threadCount              Int            @default(1)
+  iterationLimit           Int?
+  startedAt                DateTime?
+  finishedAt               DateTime?
+  errorMessage             String?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+  dataset                  Dataset        @relation(fields: [datasetId], references: [id])
 }
 
 model RefreshToken {
