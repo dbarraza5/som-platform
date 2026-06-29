@@ -1,15 +1,19 @@
+import type { ReactNode } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/authStore'
 import LoginPage from '@/pages/LoginPage'
 import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
+import NewProjectPage from '@/pages/projects/NewProjectPage'
+import EditProjectPage from '@/pages/projects/EditProjectPage'
+import ProjectDetailPage from '@/pages/projects/ProjectDetailPage'
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({ children }: { children: ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken)
   return accessToken ? <>{children}</> : <Navigate to="/login" replace />
 }
 
-function RequireGuest({ children }: { children: React.ReactNode }) {
+function RequireGuest({ children }: { children: ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken)
   return !accessToken ? <>{children}</> : <Navigate to="/dashboard" replace />
 }
@@ -21,26 +25,26 @@ export const router = createBrowserRouter([
   },
   {
     path: '/login',
-    element: (
-      <RequireGuest>
-        <LoginPage />
-      </RequireGuest>
-    ),
+    element: <RequireGuest><LoginPage /></RequireGuest>,
   },
   {
     path: '/register',
-    element: (
-      <RequireGuest>
-        <RegisterPage />
-      </RequireGuest>
-    ),
+    element: <RequireGuest><RegisterPage /></RequireGuest>,
   },
   {
     path: '/dashboard',
-    element: (
-      <RequireAuth>
-        <DashboardPage />
-      </RequireAuth>
-    ),
+    element: <RequireAuth><DashboardPage /></RequireAuth>,
+  },
+  {
+    path: '/projects/new',
+    element: <RequireAuth><NewProjectPage /></RequireAuth>,
+  },
+  {
+    path: '/projects/:id',
+    element: <RequireAuth><ProjectDetailPage /></RequireAuth>,
+  },
+  {
+    path: '/projects/:id/edit',
+    element: <RequireAuth><EditProjectPage /></RequireAuth>,
   },
 ])

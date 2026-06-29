@@ -1,57 +1,73 @@
-import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { authApi } from '@/api/auth'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { projectsApi } from '@/api/projects'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import AppLayout from '@/components/layout/AppLayout'
+import ProjectCard from '@/components/projects/ProjectCard'
+import EmptyProjects from '@/components/projects/EmptyProjects'
+import DeleteProjectDialog from '@/components/projects/DeleteProjectDialog'
+import type { Project } from '@/types/project'
 
 export default function DashboardPage() {
-  const navigate = useNavigate()
-  const { clearAuth, refreshToken } = useAuthStore()
+  const { user } = useAuthStore()
+  const queryClient = useQueryClient()
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => authApi.me().then((r) => r.data.data.user),
-    staleTime: 1000 * 60 * 5,
+    queryKey: ['projects'],
+    queryFn: () => projectsApi.getAll().then((r) => r.data.data.projects),
   })
 
-  const handleLogout = async () => {
-    if (refreshToken) {
-      await authApi.logout(refreshToken).catch(() => {})
-    }
-    clearAuth()
-    navigate('/login')
-  }
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => projectsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      setProjectToDelete(null)
+    },
+  })
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground text-sm">Cargando...</p>
-      </div>
-    )
-  }
+  const projects = data ?? []
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="space-y-1">
-          <CardTitle>SOM Platform</CardTitle>
-          <CardDescription>Sesión activa</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1 text-sm">
-            <p className="text-muted-foreground">Nombre</p>
-            <p className="font-medium">{data?.nombre}</p>
+    <AppLayout>
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Bienvenido, {user?.nombre}</h1>
+            <p className="text-sm text-muted-foreground">Tus proyectos de análisis SOM</p>
           </div>
-          <div className="space-y-1 text-sm">
-            <p className="text-muted-foreground">Email</p>
-            <p className="font-medium">{data?.email}</p>
-          </div>
-          <Button variant="outline" className="w-full" onClick={handleLogout}>
-            Cerrar sesión
+          <Button asChild>
+            <Link to="/projects/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Nuevo proyecto
+            </Link>
           </Button>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-20">
+            <p className="text-sm text-muted-foreground">Cargando proyectos...</p>
+          </div>
+        ) : projects.length === 0 ? (
+          <EmptyProjects />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {projects.map((project) => (
+              <ProjectCard key={project.id} project={project} onDelete={setProjectToDelete} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <DeleteProjectDialog
+        project={projectToDelete}
+        onConfirm={() => projectToDelete && deleteMutation.mutate(projectToDelete.id)}
+        onCancel={() => setProjectToDelete(null)}
+        isDeleting={deleteMutation.isPending}
+      />
+    </AppLayout>
   )
 }
