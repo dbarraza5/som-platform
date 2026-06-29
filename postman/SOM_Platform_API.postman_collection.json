@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "SOM Platform API",
-    "description": "# SOM Platform API\n\nColección oficial de la API de SOM Platform — plataforma SaaS para análisis de datos con redes neuronales SOM.\n\n## Autenticación\n\nLas rutas protegidas usan **Bearer Token** (JWT de acceso). El token se guarda automáticamente en el environment al hacer login y se borra al hacer logout.\n\n## Variables de entorno\n\n| Variable | Descripción | Ejemplo |\n|---|---|---|\n| `baseUrl` | URL base del backend | `http://localhost:3000/api` |\n| `accessToken` | JWT de acceso (TTL 15 min) | Se llena automáticamente tras login |\n| `refreshToken` | JWT de refresco (TTL 7 días) | Se llena automáticamente tras login |\n| `currentProjectId` | ID del proyecto activo | Se llena automáticamente tras crear proyecto |\n| `currentDatasetId` | ID del dataset activo | Se llena automáticamente tras crear dataset |\n\n## Flujo recomendado de prueba\n\n1. **Register** → crear usuario\n2. **Login** → obtener tokens (se guardan automáticamente)\n3. **Create Project** → crear proyecto (el ID se guarda automáticamente)\n4. **Create Dataset** → crear dataset (el ID se guarda automáticamente)\n5. **List Datasets** → verificar listado\n6. **Get Dataset** → verificar detalle\n7. **Update Dataset** → modificar\n8. **Delete Dataset** → eliminar\n9. **Logout** → revocar tokens",
+    "description": "# SOM Platform API\n\nColección oficial de la API de SOM Platform — plataforma SaaS para análisis de datos con redes neuronales SOM.\n\n## Autenticación\n\nLas rutas protegidas usan **Bearer Token** (JWT de acceso). El token se guarda automáticamente en el environment al hacer login y se borra al hacer logout.\n\n## Variables de entorno\n\n| Variable | Descripción | Ejemplo |\n|---|---|---|\n| `baseUrl` | URL base del backend | `http://localhost:3000/api` |\n| `accessToken` | JWT de acceso (TTL 15 min) | Se llena automáticamente tras login |\n| `refreshToken` | JWT de refresco (TTL 7 días) | Se llena automáticamente tras login |\n| `currentProjectId` | ID del proyecto activo | Se llena automáticamente tras crear proyecto |\n| `currentDatasetId` | ID del dataset activo | Se llena automáticamente tras crear dataset |\n\n## Flujo recomendado de prueba\n\n1. **Register** → crear usuario\n2. **Login** → obtener tokens (se guardan automáticamente)\n3. **Create Project** → crear proyecto (el ID se guarda automáticamente)\n4. **Create Dataset** → crear dataset (el ID se guarda automáticamente)\n5. **Upload Dataset** → subir archivo CSV al dataset\n6. **Get Dataset** → verificar que los metadatos del archivo se guardaron\n7. **Update Dataset** → modificar nombre/descripción\n8. **Delete Dataset** → eliminar\n9. **Logout** → revocar tokens",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -383,7 +383,7 @@
     },
     {
       "name": "Datasets",
-      "description": "CRUD de datasets asociados a un proyecto. Todos los endpoints requieren autenticación.\n\nEn esta fase los datasets son recursos lógicos (sin archivo adjunto). Los campos de archivo se completarán en la Fase 6.3.",
+      "description": "CRUD de datasets asociados a un proyecto. Todos los endpoints requieren autenticación.\n\nDesde la Fase 6.3 los datasets admiten un archivo CSV adjunto mediante `POST /datasets/:id/upload`.",
       "_postman_id": "f4000000-0000-0000-0000-000000000001",
       "item": [
         {
@@ -451,6 +451,31 @@
           }
         },
         {
+          "name": "Upload Dataset",
+          "_postman_id": "f4000000-0000-0000-0000-000000000007",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Archivo CSV a subir. Solo se acepta extensión .csv con MIME type text/csv."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/datasets/{{currentDatasetId}}/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["datasets", "{{currentDatasetId}}", "upload"]
+            },
+            "description": "## Subir archivo CSV a un dataset\n\nSube un archivo CSV y lo asocia al dataset. Si el dataset ya tenía un archivo, el anterior se elimina y es reemplazado por el nuevo.\n\n**Requiere autenticación.** El usuario debe ser propietario del proyecto al que pertenece el dataset.\n\n### Body (multipart/form-data)\n\n| Campo | Tipo | Requerido | Descripción |\n|---|---|---|---|\n| `file` | File | ✅ | Archivo CSV. Solo `.csv`, máximo 10 MB. |\n\n### Validaciones\n- Extensión debe ser `.csv`\n- MIME type debe ser `text/csv` o `application/vnd.ms-excel`\n- Tamaño máximo: `UPLOAD_MAX_FILE_SIZE` (por defecto 10 MB)\n\n### Estructura de almacenamiento\n\nEl archivo se guarda bajo la clave lógica:\n```\nprojects/{projectId}/datasets/{datasetId}/original.csv\n```\n\n### Respuesta esperada (200)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"dataset\": {\n      \"id\": \"clxxxxxx\",\n      \"projectId\": \"clxxxxxx\",\n      \"name\": \"Clientes 2025\",\n      \"originalFilename\": \"clientes_2025.csv\",\n      \"storageKey\": \"projects/clxxxxxx/datasets/clxxxxxx/original.csv\",\n      \"mimeType\": \"text/csv\",\n      \"fileSize\": 204800,\n      \"uploadedAt\": \"2026-06-29T00:00:00.000Z\",\n      \"rows\": null,\n      \"columns\": null\n    }\n  }\n}\n```\n\n### Error (400) — Tipo de archivo inválido\n```json\n{ \"success\": false, \"message\": \"Only CSV files are allowed\" }\n```\n\n### Error (400) — Archivo demasiado grande\n```json\n{ \"success\": false, \"message\": \"File exceeds the maximum allowed size\" }\n```\n\n### Error (400) — Sin archivo\n```json\n{ \"success\": false, \"message\": \"No file provided\" }\n```\n\n### Error (404) — Dataset no encontrado\n```json\n{ \"success\": false, \"message\": \"Dataset not found\" }\n```\n\n### Error (403) — Sin acceso\n```json\n{ \"success\": false, \"message\": \"Access denied\" }\n```"
+          }
+        },
+        {
           "name": "Update Dataset",
           "_postman_id": "f4000000-0000-0000-0000-000000000005",
           "request": {
@@ -495,7 +520,7 @@
     },
     {
       "name": "Files",
-      "description": "Upload y descarga de archivos (S3). **No implementado aún** — placeholder para fases futuras.",
+      "description": "Upload y descarga de archivos. El upload CSV está implementado en `POST /datasets/:id/upload` (ver carpeta Datasets). Descarga y presigned URLs — placeholder para fases futuras.",
       "_postman_id": "f6000000-0000-0000-0000-000000000001",
       "item": []
     },

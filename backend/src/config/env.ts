@@ -10,4 +10,7 @@ export const env = {
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
   NODE_ENV: process.env.NODE_ENV ?? 'development',
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  STORAGE_DRIVER: process.env.STORAGE_DRIVER ?? 'local',
+  STORAGE_LOCAL_PATH: process.env.STORAGE_LOCAL_PATH ?? '/app/storage',
+  UPLOAD_MAX_FILE_SIZE: parseInt(process.env.UPLOAD_MAX_FILE_SIZE ?? String(10 * 1024 * 1024), 10),
 }

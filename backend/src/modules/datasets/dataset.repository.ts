@@ -11,6 +11,14 @@ type UpdateDatasetData = {
   description?: string | null
 }
 
+type UpdateFileMetadata = {
+  originalFilename: string
+  storageKey: string
+  mimeType: string
+  fileSize: number
+  uploadedAt: Date
+}
+
 export const datasetRepository = {
   findAllByProjectId(projectId: string) {
     return prisma.dataset.findMany({
@@ -36,5 +44,9 @@ export const datasetRepository = {
 
   delete(id: string) {
     return prisma.dataset.delete({ where: { id } })
+  },
+
+  updateFileMetadata(id: string, data: UpdateFileMetadata) {
+    return prisma.dataset.update({ where: { id }, data })
   },
 }

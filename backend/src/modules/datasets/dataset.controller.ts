@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
+import multer from 'multer'
 import { datasetService } from './dataset.service'
 import { success, error } from '../../utils/response'
+import { runUpload } from '../../middlewares/upload'
 
 function handleDatasetError(err: unknown, res: Response): boolean {
   if (err instanceof Error) {
@@ -66,6 +68,30 @@ export const datasetController = {
       await datasetService.delete(req.params.id, req.user!.id)
       success(res, null, 200, 'Dataset deleted successfully')
     } catch (err) {
+      if (!handleDatasetError(err, res)) throw err
+    }
+  },
+
+  async upload(req: Request, res: Response) {
+    try {
+      await runUpload(req, res)
+
+      if (!req.file) {
+        error(res, 'No file provided', 400)
+        return
+      }
+
+      const dataset = await datasetService.uploadFile(req.params.id, req.user!.id, req.file)
+      success(res, { dataset })
+    } catch (err) {
+      if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+        error(res, 'File exceeds the maximum allowed size', 400)
+        return
+      }
+      if (err instanceof Error && err.message === 'INVALID_FILE_TYPE') {
+        error(res, 'Only CSV files are allowed', 400)
+        return
+      }
       if (!handleDatasetError(err, res)) throw err
     }
   },

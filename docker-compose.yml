@@ -16,6 +16,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - storage_data:/app/storage
     env_file: ./backend/.env
     depends_on:
       db:
@@ -54,3 +55,4 @@ services:
 
 volumes:
   postgres_data:
+  storage_data:

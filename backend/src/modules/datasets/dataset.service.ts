@@ -1,5 +1,6 @@
 import { projectRepository } from '../projects/project.repository'
 import { datasetRepository } from './dataset.repository'
+import { getStorageProvider } from '../../storage'
 
 type CreateDatasetData = {
   name: string
@@ -48,5 +49,26 @@ export const datasetService = {
   async delete(id: string, userId: string) {
     await assertDatasetOwnership(id, userId)
     await datasetRepository.delete(id)
+  },
+
+  async uploadFile(id: string, userId: string, file: Express.Multer.File) {
+    const dataset = await assertDatasetOwnership(id, userId)
+    const storage = getStorageProvider()
+    const key = `projects/${dataset.project.id}/datasets/${dataset.id}/original.csv`
+
+    if (dataset.storageKey) {
+      const fileExists = await storage.exists(dataset.storageKey)
+      if (fileExists) await storage.delete(dataset.storageKey)
+    }
+
+    await storage.save({ key, buffer: file.buffer, mimeType: file.mimetype })
+
+    return datasetRepository.updateFileMetadata(id, {
+      originalFilename: file.originalname,
+      storageKey: key,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      uploadedAt: new Date(),
+    })
   },
 }
