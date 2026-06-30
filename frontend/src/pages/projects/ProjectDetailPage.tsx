@@ -1,10 +1,15 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, BarChart2, Cpu, Database, Network, Pencil } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, BarChart2, Database, Network, Pencil, Plus, Cpu } from 'lucide-react'
 import { projectsApi } from '@/api/projects'
+import { datasetsApi } from '@/api/datasets'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import AppLayout from '@/components/layout/AppLayout'
+import DatasetListItem from '@/components/datasets/DatasetListItem'
+import DeleteDatasetDialog from '@/components/datasets/DeleteDatasetDialog'
+import type { Dataset } from '@/types/dataset'
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('es-ES', {
@@ -16,39 +21,38 @@ function formatDate(dateStr: string) {
   })
 }
 
-const futureSections = [
-  {
-    icon: Database,
-    title: 'Dataset',
-    description: 'Carga y configura el dataset CSV para el análisis.',
-  },
-  {
-    icon: Cpu,
-    title: 'Training Jobs',
-    description: 'Ejecuta y monitorea el entrenamiento de la red SOM.',
-  },
-  {
-    icon: BarChart2,
-    title: 'Resultados',
-    description: 'Consulta métricas y estadísticas del entrenamiento.',
-  },
-  {
-    icon: Network,
-    title: 'Visualización SOM',
-    description: 'Explora el mapa auto-organizado generado.',
-  },
+const placeholderModules = [
+  { icon: Cpu,      title: 'Training Jobs',      description: 'Ejecuta y monitorea el entrenamiento de la red SOM.' },
+  { icon: BarChart2, title: 'Resultados',         description: 'Consulta métricas y estadísticas del entrenamiento.' },
+  { icon: Network,  title: 'Visualización SOM',  description: 'Explora el mapa auto-organizado generado.' },
 ]
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
+  const [toDelete, setToDelete] = useState<Dataset | null>(null)
 
-  const { data: project, isLoading } = useQuery({
+  const { data: project, isLoading: loadingProject } = useQuery({
     queryKey: ['project', id],
     queryFn: () => projectsApi.getById(id!).then((r) => r.data.data.project),
     enabled: !!id,
   })
 
-  if (isLoading) {
+  const { data: datasets = [], isLoading: loadingDatasets } = useQuery({
+    queryKey: ['datasets', id],
+    queryFn: () => datasetsApi.getAll(id!).then((r) => r.data.data.datasets),
+    enabled: !!id,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (datasetId: string) => datasetsApi.delete(datasetId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['datasets', id] })
+      setToDelete(null)
+    },
+  })
+
+  if (loadingProject) {
     return (
       <AppLayout>
         <div className="flex justify-center py-20">
@@ -74,6 +78,7 @@ export default function ProjectDetailPage() {
   return (
     <AppLayout>
       <div className="space-y-8">
+        {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <Button variant="ghost" size="sm" asChild className="-ml-3 mb-1">
@@ -95,6 +100,7 @@ export default function ProjectDetailPage() {
           </Button>
         </div>
 
+        {/* Project info */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Información del proyecto</CardTitle>
@@ -111,10 +117,58 @@ export default function ProjectDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Datasets */}
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Datasets</h2>
+            <Button asChild size="sm">
+              <Link to={`/projects/${id}/datasets/new`}>
+                <Plus className="mr-2 h-4 w-4" />
+                Crear dataset
+              </Link>
+            </Button>
+          </div>
+
+          <Card>
+            {loadingDatasets ? (
+              <div className="py-10 text-center">
+                <p className="text-sm text-muted-foreground">Cargando datasets...</p>
+              </div>
+            ) : datasets.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-14 text-center">
+                <div className="rounded-full bg-muted p-3">
+                  <Database className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Aún no hay datasets en este proyecto.
+                </p>
+                <Button asChild size="sm" variant="outline">
+                  <Link to={`/projects/${id}/datasets/new`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Crear el primero
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {datasets.map((dataset) => (
+                  <DatasetListItem
+                    key={dataset.id}
+                    dataset={dataset}
+                    projectId={id!}
+                    onDelete={setToDelete}
+                  />
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Placeholder modules */}
         <div>
           <h2 className="mb-4 text-lg font-semibold">Módulos</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {futureSections.map(({ icon: Icon, title, description }) => (
+          <div className="grid gap-4 sm:grid-cols-3">
+            {placeholderModules.map(({ icon: Icon, title, description }) => (
               <Card key={title} className="border-dashed opacity-60">
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-3">
@@ -133,6 +187,13 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+
+      <DeleteDatasetDialog
+        dataset={toDelete}
+        onConfirm={() => toDelete && deleteMutation.mutate(toDelete.id)}
+        onCancel={() => setToDelete(null)}
+        isDeleting={deleteMutation.isPending}
+      />
     </AppLayout>
   )
 }
