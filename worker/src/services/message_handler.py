@@ -1,13 +1,14 @@
 import json
 import logging
 import os
-import shutil
 
 from ..storage.factory import get_storage_provider
+from .normalization_service import NormalizationService
 
 logger = logging.getLogger(__name__)
 
 _TEMP_BASE = "temp"
+_DELIMITER = ";"
 
 
 def handle_message(message: dict) -> None:
@@ -40,13 +41,23 @@ def handle_message(message: dict) -> None:
 
         logger.info("[WORKER] Validación exitosa. Tamaño: %d bytes.", size)
 
+        logger.info("[WORKER] Iniciando normalización...")
+        normalization = NormalizationService(delimiter=_DELIMITER)
+        result = normalization.run(input_path=temp_file, output_dir=temp_dir)
+
+        for output_path in (result.normalized_csv_path, result.dimensions_xml_path):
+            if not os.path.isfile(output_path):
+                raise RuntimeError(f"El algoritmo no generó el archivo esperado: {output_path}")
+            if os.path.getsize(output_path) == 0:
+                raise RuntimeError(f"El archivo generado está vacío: {output_path}")
+
+        logger.info("[WORKER] Normalización finalizada correctamente.")
+        logger.info("[WORKER] Archivo generado: %s", result.normalized_csv_path)
+        logger.info("[WORKER] Archivo generado: %s", result.dimensions_xml_path)
+
     except FileNotFoundError as exc:
         logger.error("[WORKER] Archivo no encontrado en el storage: %s", exc)
     except OSError as exc:
         logger.error("[WORKER] Error de escritura en directorio temporal: %s", exc)
     except Exception as exc:
-        logger.error("[WORKER] Error inesperado durante la descarga: %s", exc)
-    finally:
-        if os.path.isdir(temp_dir):
-            shutil.rmtree(temp_dir)
-            logger.info("[WORKER] Directorio temporal limpiado: %s", temp_dir)
+        logger.error("[WORKER] Error inesperado durante la normalización: %s", exc)

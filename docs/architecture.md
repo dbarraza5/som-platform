@@ -271,6 +271,48 @@ Each job writes to its own isolated directory `temp/job-<datasetId>/`. It is cle
 
 ---
 
+## Worker Normalization (Phase 7.5)
+
+`NormalizationService` (`worker/src/services/normalization_service.py`) executes the preprocessing algorithm used to prepare a dataset for SOM training: it reads the CSV, detects each column's type (continuous vs. discrete/categorical), casts and min-max normalizes to [0,1], shuffles rows, and writes the result.
+
+It is a reusable module with no knowledge of Redis, the queue, Docker, storage, or the backend — it only takes an input file path and an output directory:
+
+```python
+service = NormalizationService(delimiter=";")
+result = service.run(input_path=temp_file, output_dir=temp_dir)
+# result.normalized_csv_path, result.dimensions_xml_path
+```
+
+```
+handle_message()
+        │
+  original.csv already downloaded (Phase 7.4)
+        │
+        ▼
+  NormalizationService.run(temp_file, temp_dir)
+        │
+        ▼
+  temp/job-<datasetId>/normalized.csv
+  temp/job-<datasetId>/dimensions.xml
+        │
+        ▼
+  Validate both files exist and size > 0
+        │
+        ▼
+  Cleanup temp dir
+```
+
+### Output filenames
+Fixed regardless of the input filename: `normalized.csv` and `dimensions.xml`. This keeps downstream phases (upload, SOM training) simple — no dynamic naming to parse.
+
+### Dependencies
+Added to `worker/requirements.txt`: `pandas` and `numpy` (the algorithm's CSV parsing, casting, and min-max normalization rely on both). No Dockerfile changes were needed — both ship as prebuilt wheels for `python:3.12-slim`.
+
+### Not yet implemented
+Uploading `normalized.csv` / `dimensions.xml` back to storage, updating `Dataset.normalizationStatus` in PostgreSQL, and any REST callback to the backend. The files are validated and then discarded with the rest of the temp directory, same as before this phase.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -283,6 +325,7 @@ Each job writes to its own isolated directory `temp/job-<datasetId>/`. It is cle
 | 7.2   | Enqueue NORMALIZE on CSV upload      | Complete    |
 | 7.3   | Python worker infrastructure         | Complete    |
 | 7.4   | Worker downloads dataset via StorageProvider | Complete |
+| 7.5   | Normalization algorithm integration (NormalizationService) | Complete |
 | 8     | SOM worker integration               | Pending     |
 | 9     | Results visualization                | Pending     |
 | 10    | AWS deployment                       | Pending     |

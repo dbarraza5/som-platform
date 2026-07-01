@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 6** — Authentication, project CRUD, dataset CRUD, and CSV file upload implemented.
+**Phase 7.5** — Queue + storage abstractions, worker downloads the dataset, and normalization algorithm integrated (NormalizationService generates `normalized.csv` / `dimensions.xml` in the temp job directory).
