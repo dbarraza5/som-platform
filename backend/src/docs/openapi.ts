@@ -705,6 +705,71 @@ const datasets = {
   },
 }
 
+const dev = {
+  '/dev/queue-test': {
+    post: {
+      tags: ['Dev'],
+      summary: '[DEV] Publicar mensaje de prueba en la cola',
+      description:
+        '**Solo disponible en `NODE_ENV !== production`.** Publica un mensaje de prueba en la cola configurada (Redis por defecto) para verificar que la infraestructura de colas funciona correctamente. Este endpoint será eliminado en fases futuras.',
+      security: [],
+      servers: [{ url: 'http://localhost:3000', description: 'Dev server (sin prefijo /api)' }],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                datasetId: {
+                  type: 'string',
+                  example: 'cm1xyz',
+                  description: 'ID del dataset a incluir en el mensaje. Por defecto: "test-dataset-id".',
+                },
+                storageKey: {
+                  type: 'string',
+                  example: 'projects/cm1abc/datasets/cm1xyz/original.csv',
+                  description: 'Clave de almacenamiento del archivo. Por defecto: ruta de ejemplo.',
+                },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        '200': {
+          description: 'Mensaje publicado correctamente en la cola',
+          content: {
+            'application/json': {
+              example: {
+                success: true,
+                data: {
+                  published: true,
+                  queue: 'som_jobs',
+                  message: {
+                    operation: 'NORMALIZE',
+                    datasetId: 'cm1xyz',
+                    storageKey: 'projects/cm1abc/datasets/cm1xyz/original.csv',
+                    timestamp: '2026-07-01T10:30:00.000Z',
+                  },
+                },
+              },
+            },
+          },
+        },
+        '500': {
+          description: 'Error de conexión con Redis',
+          content: {
+            'application/json': {
+              example: { success: false, message: 'connect ECONNREFUSED 127.0.0.1:6379' },
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
 export const openApiDocument = {
   openapi: '3.1.0',
   info: {
@@ -725,6 +790,7 @@ export const openApiDocument = {
     { name: 'Projects', description: 'Gestión de proyectos del usuario autenticado' },
     { name: 'Datasets', description: 'Gestión de datasets y upload de archivos CSV' },
     { name: 'Training Jobs', description: 'Entrenamientos SOM — disponible en fases futuras' },
+    { name: 'Dev', description: 'Endpoints temporales de desarrollo. Solo disponibles con NODE_ENV=development.' },
   ],
   components: {
     securitySchemes: {
@@ -742,5 +808,6 @@ export const openApiDocument = {
     ...auth,
     ...projects,
     ...datasets,
+    ...dev,
   },
 }

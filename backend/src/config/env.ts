@@ -13,4 +13,8 @@ export const env = {
   STORAGE_DRIVER: process.env.STORAGE_DRIVER ?? 'local',
   STORAGE_LOCAL_PATH: process.env.STORAGE_LOCAL_PATH ?? '/app/storage',
   UPLOAD_MAX_FILE_SIZE: parseInt(process.env.UPLOAD_MAX_FILE_SIZE ?? String(10 * 1024 * 1024), 10),
+  QUEUE_DRIVER: process.env.QUEUE_DRIVER ?? 'redis',
+  REDIS_HOST: process.env.REDIS_HOST ?? 'redis',
+  REDIS_PORT: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+  QUEUE_NAME: process.env.QUEUE_NAME ?? 'som_jobs',
 }

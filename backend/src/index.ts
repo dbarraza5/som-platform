@@ -3,6 +3,7 @@ import cors from 'cors'
 import { apiReference } from '@scalar/express-api-reference'
 import { env } from './config/env'
 import routes from './routes'
+import devRoutes from './routes/dev.routes'
 import { errorHandler } from './middlewares/errorHandler'
 import { openApiDocument } from './docs/openapi'
 
@@ -23,6 +24,10 @@ app.get('/api/openapi.json', (_req, res) => {
 app.use('/api/docs', apiReference({ spec: { url: '/api/openapi.json' } }))
 
 app.use('/api', routes)
+
+if (env.NODE_ENV !== 'production') {
+  app.use('/dev', devRoutes)
+}
 
 app.use(errorHandler)
 

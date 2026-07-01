@@ -82,13 +82,70 @@ worker (Python)
 
 ---
 
+## Queue Abstraction (Phase 7.1)
+
+The backend never talks to Redis or SQS directly. All queue operations go through `QueueService`, which delegates to an `IQueueProvider` implementation resolved at startup.
+
+```
+QUEUE_DRIVER env var
+        │
+        ▼
+  getQueueService()          ← only place that reads QUEUE_DRIVER
+        │
+        ▼
+   QueueService              ← what the rest of the backend uses
+        │
+  IQueueProvider
+   ├── RedisQueueProvider    ← QUEUE_DRIVER=redis  (local dev)
+   └── SQSQueueProvider      ← QUEUE_DRIVER=sqs    (production, placeholder)
+```
+
+### Why `IQueueProvider`?
+Swapping from Redis to SQS in production requires changing a single environment variable. No application code changes.
+
+### Why `QueueService`?
+It hides provider selection and the default queue name from callers. Usage anywhere in the backend:
+```typescript
+await getQueueService().publish({ operation: 'NORMALIZE', datasetId, storageKey, timestamp })
+```
+
+### Message format
+```json
+{
+  "operation": "NORMALIZE",
+  "datasetId": "cm1xyz",
+  "storageKey": "projects/cm1abc/datasets/cm1xyz/original.csv",
+  "timestamp": "2026-07-01T10:30:00.000Z"
+}
+```
+
+Messages are self-describing: they carry the operation type and all data the worker needs, so the worker never has to query the database to start processing.
+
+### Queue environment variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QUEUE_DRIVER` | `redis` | Provider: `redis` or `sqs` |
+| `REDIS_HOST` | `redis` | Redis hostname (Docker service name in dev) |
+| `REDIS_PORT` | `6379` | Redis port |
+| `QUEUE_NAME` | `som_jobs` | Default queue / list name |
+
+### Switching to SQS (future)
+1. Set `QUEUE_DRIVER=sqs` in the environment.
+2. Implement `SQSQueueProvider` using `@aws-sdk/client-sqs`.
+3. No other code changes needed.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
 |-------|--------------------------------------|-------------|
 | 0     | Docker Compose dev environment       | Complete    |
-| 1     | Auth + basic API skeleton            | Pending     |
-| 2     | File upload + job creation           | Pending     |
-| 3     | SOM worker integration               | Pending     |
-| 4     | Results visualization                | Pending     |
-| 5     | AWS deployment                       | Pending     |
+| 1     | Auth + API skeleton                  | Complete    |
+| 6.1–6.4 | Domain model + Dataset CRUD + CSV upload + analysis | Complete |
+| 6.5–6.6 | Frontend: auth, projects, datasets  | Complete    |
+| 7.1   | Queue abstraction (IQueueProvider)   | Complete    |
+| 7.2   | TrainingJob CRUD + enqueue           | Pending     |
+| 8     | SOM worker integration               | Pending     |
+| 9     | Results visualization                | Pending     |
+| 10    | AWS deployment                       | Pending     |
