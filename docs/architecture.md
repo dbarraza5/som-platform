@@ -219,6 +219,58 @@ QUEUE_DRIVER env var
 
 ---
 
+## Worker Storage (Phase 7.4)
+
+The worker downloads files through `IStorageProvider`, mirroring the backend's `IFileStorageProvider` pattern. It never touches the filesystem directly.
+
+```
+Worker receives QueueMessage (storageKey)
+        │
+        ▼
+  get_storage_provider()     ← only place that reads STORAGE_DRIVER
+        │
+        ▼
+   IStorageProvider
+   ├── LocalStorageProvider  ← STORAGE_DRIVER=local  (local dev, shared Docker volume)
+   └── S3StorageProvider     ← STORAGE_DRIVER=s3     (production, placeholder)
+        │
+        ▼
+  download(storageKey, temp_file)
+        │
+        ▼
+  temp/job-<datasetId>/original.csv
+        │
+        ▼
+  Validate (file exists, size > 0)
+        │
+        ▼
+  Cleanup temp dir
+```
+
+### Shared storage volume
+Backend and worker mount the same Docker named volume:
+```yaml
+backend:  storage_data:/app/storage
+worker:   storage_data:/app/storage
+```
+Both use `STORAGE_LOCAL_PATH=/app/storage`. The worker reads files the backend wrote without any network call.
+
+### Temp directory
+Each job writes to its own isolated directory `temp/job-<datasetId>/`. It is cleaned up in the `finally` block whether the job succeeds or fails, so temp files never accumulate.
+
+### Switching to S3 (future)
+1. Set `STORAGE_DRIVER=s3` in `worker/.env`.
+2. Implement `S3StorageProvider.download()` using `boto3`.
+3. No other code changes needed.
+
+### Storage environment variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STORAGE_DRIVER` | `local` | Provider: `local` or `s3` |
+| `STORAGE_LOCAL_PATH` | `/app/storage` | Root path for local storage (must match backend) |
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -228,7 +280,9 @@ QUEUE_DRIVER env var
 | 6.1–6.4 | Domain model + Dataset CRUD + CSV upload + analysis | Complete |
 | 6.5–6.6 | Frontend: auth, projects, datasets  | Complete    |
 | 7.1   | Queue abstraction (IQueueProvider)   | Complete    |
-| 7.2   | TrainingJob CRUD + enqueue           | Pending     |
+| 7.2   | Enqueue NORMALIZE on CSV upload      | Complete    |
+| 7.3   | Python worker infrastructure         | Complete    |
+| 7.4   | Worker downloads dataset via StorageProvider | Complete |
 | 8     | SOM worker integration               | Pending     |
 | 9     | Results visualization                | Pending     |
 | 10    | AWS deployment                       | Pending     |

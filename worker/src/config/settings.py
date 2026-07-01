@@ -7,6 +7,8 @@ class Settings:
     REDIS_PORT: int = int(os.environ.get("REDIS_PORT", "6379"))
     QUEUE_NAME: str = os.environ.get("QUEUE_NAME", "som_jobs")
     LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
+    STORAGE_DRIVER: str = os.environ.get("STORAGE_DRIVER", "local")
+    STORAGE_LOCAL_PATH: str = os.environ.get("STORAGE_LOCAL_PATH", "/app/storage")
 
 
 settings = Settings()
