@@ -1,0 +1,12 @@
+import os
+
+
+class Settings:
+    QUEUE_DRIVER: str = os.environ.get("QUEUE_DRIVER", "redis")
+    REDIS_HOST: str = os.environ.get("REDIS_HOST", "redis")
+    REDIS_PORT: int = int(os.environ.get("REDIS_PORT", "6379"))
+    QUEUE_NAME: str = os.environ.get("QUEUE_NAME", "som_jobs")
+    LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
+
+
+settings = Settings()

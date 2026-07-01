@@ -1,2 +1,1 @@
-# Phase 0: no dependencies yet
-# Future phases will add: numpy, minisom, redis, psycopg2
+redis>=5.0

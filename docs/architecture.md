@@ -170,6 +170,55 @@ Messages are self-describing: they carry the operation type and all data the wor
 
 ---
 
+## Worker Python (Phase 7.3)
+
+The worker is an independent Python process. It never knows whether its queue backend is Redis or SQS — all queue operations go through `IQueueConsumer`.
+
+```
+QUEUE_DRIVER env var
+        │
+        ▼
+  create_queue_consumer()    ← only place that reads QUEUE_DRIVER
+        │
+        ▼
+   IQueueConsumer
+   ├── RedisQueueConsumer    ← QUEUE_DRIVER=redis  (local dev, BRPOP)
+   └── SQSQueueConsumer      ← QUEUE_DRIVER=sqs    (production, placeholder)
+        │
+        ▼
+   handle_message()          ← services/message_handler.py
+   (logs only for now — processing added in Phase 7.4+)
+```
+
+### Startup sequence
+```
+[WORKER] Iniciando...
+[WORKER] Configuración cargada.
+[WORKER] Conectando a REDIS...
+[WORKER] Conectado correctamente.
+[WORKER] Esperando trabajos en cola 'som_jobs'...
+```
+
+### On message received
+```
+[WORKER] Mensaje recibido.
+[WORKER]
+{
+  "operation": "NORMALIZE",
+  "datasetId": "...",
+  "projectId": "...",
+  "storageKey": "...",
+  "timestamp": "..."
+}
+```
+
+### Switching to SQS (future)
+1. Set `QUEUE_DRIVER=sqs` in `worker/.env`.
+2. Implement `SQSQueueConsumer` using `boto3`.
+3. No other code changes needed.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
