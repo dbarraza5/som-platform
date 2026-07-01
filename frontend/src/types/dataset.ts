@@ -1,4 +1,5 @@
 export type AnalysisStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+export type NormalizationStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
 
 export interface Dataset {
   id: string
@@ -14,6 +15,8 @@ export interface Dataset {
   uploadedAt: string | null
   analysisStatus: AnalysisStatus
   analysisError: string | null
+  normalizationStatus: NormalizationStatus
+  normalizationError: string | null
   createdAt: string
   updatedAt: string
 }

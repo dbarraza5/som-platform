@@ -2,6 +2,8 @@ import { projectRepository } from '../projects/project.repository'
 import { datasetRepository } from './dataset.repository'
 import { getStorageProvider } from '../../storage'
 import { datasetAnalyzerService } from './dataset.analyzer'
+import { getQueueService } from '../../queue'
+import type { QueueMessage } from '../../queue'
 
 type CreateDatasetData = {
   name: string
@@ -57,6 +59,8 @@ export const datasetService = {
     const storage = getStorageProvider()
     const key = `projects/${dataset.project.id}/datasets/${dataset.id}/original.csv`
 
+    console.log(`[UPLOAD] Dataset ${id} recibido. Archivo: ${file.originalname} (${file.size} bytes)`)
+
     if (dataset.storageKey) {
       const fileExists = await storage.exists(dataset.storageKey)
       if (fileExists) await storage.delete(dataset.storageKey)
@@ -72,8 +76,10 @@ export const datasetService = {
       uploadedAt: new Date(),
     })
 
+    // --- CSV analysis (Phase 6.4) — synchronous, runs in the same HTTP request ---
     await datasetRepository.updateAnalysis(id, { analysisStatus: 'PROCESSING' })
 
+    let analysisOk = false
     try {
       const stream = await storage.getReadStream(key)
       const result = await datasetAnalyzerService.analyze(stream)
@@ -83,12 +89,44 @@ export const datasetService = {
         columns: result.columns,
         analysisError: null,
       })
+      analysisOk = true
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Analysis failed'
+      const analysisError = err instanceof Error ? err.message : 'Analysis failed'
+      console.error(`[UPLOAD] Error al analizar dataset ${id}: ${analysisError}`)
       await datasetRepository.updateAnalysis(id, {
         analysisStatus: 'FAILED',
-        analysisError: message,
+        analysisError,
       })
+      await datasetRepository.updateNormalization(id, {
+        normalizationStatus: 'FAILED',
+        normalizationError: 'CSV analysis failed; normalization was not enqueued.',
+      })
+    }
+
+    // --- Queue publish (Phase 7.2) — only if analysis succeeded ---
+    if (analysisOk) {
+      await datasetRepository.updateNormalization(id, { normalizationStatus: 'PENDING' })
+
+      const message: QueueMessage = {
+        operation: 'NORMALIZE',
+        datasetId: dataset.id,
+        projectId: dataset.project.id,
+        storageKey: key,
+        timestamp: new Date().toISOString(),
+      }
+
+      console.log(`[QUEUE] Publicando trabajo de normalización para dataset ${id}.`)
+      try {
+        await getQueueService().publish(message)
+        console.log(`[QUEUE] Trabajo publicado correctamente. Dataset: ${id}, cola: ${key}`)
+      } catch (err) {
+        const queueError = err instanceof Error ? err.message : 'Queue publish failed'
+        console.error(`[QUEUE] Error al publicar trabajo para dataset ${id}: ${queueError}`)
+        await datasetRepository.updateNormalization(id, {
+          normalizationStatus: 'FAILED',
+          normalizationError: queueError,
+        })
+      }
     }
 
     return datasetRepository.findById(id)

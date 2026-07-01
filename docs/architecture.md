@@ -82,6 +82,40 @@ worker (Python)
 
 ---
 
+## Upload → Queue → Worker Flow (Phase 7.2)
+
+```
+POST /datasets/:id/upload
+        │
+        ▼
+  Save original.csv          (IFileStorageProvider)
+        │
+        ▼
+  CSV Analysis               (DatasetAnalyzerService — synchronous)
+  analysisStatus = COMPLETED/FAILED
+        │
+        │  if COMPLETED
+        ▼
+  normalizationStatus = PENDING
+        │
+        ▼
+  QueueService.publish()     (message: NORMALIZE + datasetId + projectId + storageKey)
+        │
+        ▼
+  HTTP 200 ← dataset         (normalizationStatus = PENDING or FAILED if queue error)
+        │
+        │  (async, next phase)
+        ▼
+  Worker reads Redis queue
+  normalizationStatus = PROCESSING → COMPLETED/FAILED
+```
+
+**Error handling:**
+- If CSV analysis fails → `analysisStatus = FAILED`, `normalizationStatus = FAILED` (nothing enqueued)
+- If queue publish fails → file is safe in storage, `normalizationStatus = FAILED` with the error message, HTTP still returns 200 with the dataset state
+
+---
+
 ## Queue Abstraction (Phase 7.1)
 
 The backend never talks to Redis or SQS directly. All queue operations go through `QueueService`, which delegates to an `IQueueProvider` implementation resolved at startup.

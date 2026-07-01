@@ -26,6 +26,11 @@ type UpdateAnalysisData = {
   analysisError?: string | null
 }
 
+type UpdateNormalizationData = {
+  normalizationStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  normalizationError?: string | null
+}
+
 export const datasetRepository = {
   findAllByProjectId(projectId: string) {
     return prisma.dataset.findMany({
@@ -58,6 +63,10 @@ export const datasetRepository = {
   },
 
   updateAnalysis(id: string, data: UpdateAnalysisData) {
+    return prisma.dataset.update({ where: { id }, data })
+  },
+
+  updateNormalization(id: string, data: UpdateNormalizationData) {
     return prisma.dataset.update({ where: { id }, data })
   },
 }

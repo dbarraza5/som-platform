@@ -13,12 +13,14 @@ router.post(
   '/queue-test',
   asyncHandler(async (req, res) => {
     const datasetId: string = req.body?.datasetId ?? 'test-dataset-id'
+    const projectId: string = req.body?.projectId ?? 'test-project-id'
     const storageKey: string =
-      req.body?.storageKey ?? 'projects/test/datasets/test-dataset-id/original.csv'
+      req.body?.storageKey ?? `projects/${projectId}/datasets/${datasetId}/original.csv`
 
     const message: QueueMessage = {
       operation: 'NORMALIZE',
       datasetId,
+      projectId,
       storageKey,
       timestamp: new Date().toISOString(),
     }

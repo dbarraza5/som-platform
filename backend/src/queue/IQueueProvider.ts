@@ -3,6 +3,7 @@ export type QueueOperation = 'NORMALIZE' | string
 export interface QueueMessage {
   operation: QueueOperation
   datasetId: string
+  projectId: string
   storageKey: string
   timestamp: string // ISO 8601
 }
