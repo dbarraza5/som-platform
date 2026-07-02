@@ -407,6 +407,76 @@ Summary of what was found:
 
 ---
 
+## TrainingJob Creation + Training Queue (Phase 10.1)
+
+Infrastructure only — **the Worker does not consume this queue yet, does not run `som_`, and no `ConfiguracionRNA.conf` is generated in this phase.** The only thing this phase does is let a user request a training and have that request durably queued.
+
+```
+POST /api/projects/:projectId/datasets/:datasetId/training-jobs
+        │
+        ▼
+  Validate: Dataset exists, belongs to :projectId, user owns the Project
+        │
+        ▼
+  Validate: Dataset.normalizationStatus == COMPLETED
+        │  (PENDING/PROCESSING → 409, FAILED → 422, missing → 404)
+        ▼
+  Create TrainingJob        status = QUEUED, progress = 0, neuronCount = gridWidth × gridHeight
+        │
+        ▼
+  QueueService.publish(message, TRAINING_QUEUE_NAME)   ← independent queue, not som_jobs
+        │
+        ▼
+  HTTP 201 ← TrainingJob    (status = FAILED with errorMessage if the publish itself fails)
+        │
+        │  (Worker does NOT consume this queue yet — next phase)
+        ▼
+  Message sits in 'training_jobs' untouched
+```
+
+### States
+
+`TrainingStatus`: `QUEUED → RUNNING → COMPLETED | FAILED | CANCELLED`. `QUEUED` replaces the old default `PENDING` (migration `20260703000000_add_training_job_queue_fields` renames the enum value in place — existing rows, if any, keep their data). Every `TrainingJob` starts at `QUEUED` with `progress = 0`.
+
+### Training queue
+
+A second, independent Redis list/queue (`TRAINING_QUEUE_NAME`, default `training_jobs`) — deliberately not the `som_jobs` queue used for normalization, so a burst of training requests can never delay or reorder normalization jobs (or vice versa). Goes through the same `IQueueProvider` abstraction as normalization (Phase 7.1): `QueueService.publish(message, queue)` already accepted an optional queue override, so no changes were needed to `QueueService`, `RedisQueueProvider`, or `SQSQueueProvider` — only `IQueueProvider.ts`'s `QueueMessage` type changed, from a single shape to a discriminated union:
+
+```typescript
+export type QueueMessage = NormalizeQueueMessage | TrainQueueMessage
+```
+
+### Message format
+
+```json
+{
+  "operation": "TRAIN",
+  "trainingJobId": "cmr40k6mr0005i1frb0vyo8hn",
+  "datasetId": "cmr2tw5ds00035tpjclizwitd",
+  "timestamp": "2026-07-02T21:25:39.609Z"
+}
+```
+
+No storage keys, no computed training parameters (grid size, alpha, beta, …) — the message only carries enough to look everything else up. The Worker will read `TrainingJob` and `Dataset` itself once it starts consuming this queue.
+
+### `neuronCount`
+
+Computed server-side as `gridWidth × gridHeight` rather than accepted from the client, so it can never drift out of sync with the grid dimensions. Mirrors the `som_` executable's `NUMERO_NEURONAS` config field (Phase 9), which follows the same relationship.
+
+### Responsibilities
+
+| | Backend | Worker |
+|---|---|---|
+| This phase | Validates the Dataset, creates the `TrainingJob`, publishes to `training_jobs` | Nothing — doesn't know this queue exists yet |
+| Next phase | — | Consumes `training_jobs`, reads the `TrainingJob` + `Dataset`, generates `ConfiguracionRNA.conf`, runs `som_` |
+
+### Training queue environment variable
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRAINING_QUEUE_NAME` | `training_jobs` | Queue/list name for training requests — independent of `QUEUE_NAME` (normalization) |
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -423,6 +493,7 @@ Summary of what was found:
 | 7.6   | Worker publishes results via StorageProvider + notifies Backend | Complete |
 | 8     | Frontend: Dataset detail view redesign | Complete  |
 | 9     | Worker: SOM executable integration (preparation only, no training yet) | Complete |
-| 10    | SOM training integration              | Pending    |
+| 10.1  | TrainingJob creation + training queue (Backend only, Worker doesn't consume yet) | Complete |
+| 10.2+ | Worker: consume training queue, run som_, track progress | Pending |
 | 11    | Results visualization                | Pending     |
-| 10    | AWS deployment                       | Pending     |
+| 12    | AWS deployment                       | Pending     |

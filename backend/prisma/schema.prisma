@@ -8,7 +8,7 @@ datasource db {
 }
 
 enum TrainingStatus {
-  PENDING
+  QUEUED
   RUNNING
   COMPLETED
   FAILED
@@ -79,10 +79,11 @@ model TrainingJob {
   datasetId                String
   name                     String
   description              String?
-  status                   TrainingStatus @default(PENDING)
+  status                   TrainingStatus @default(QUEUED)
   progress                 Int            @default(0)
   gridWidth                Int
   gridHeight               Int
+  neuronCount              Int
   alpha                    Float
   beta                     Float
   neighborhoodRadius       Float

@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 9** — The SOM training executable (`worker/executables/som_`) is integrated into the Worker's Docker image and verified to run, but is not yet wired into the job pipeline — see [worker/README.md](worker/README.md) for what it expects and produces.
+**Phase 10.1** — Users can create a `TrainingJob` (`POST /api/projects/:projectId/datasets/:datasetId/training-jobs`), which validates the Dataset is normalized and publishes to an independent `training_jobs` queue. The Worker doesn't consume it yet — see [docs/architecture.md](docs/architecture.md#trainingjob-creation--training-queue-phase-101).
