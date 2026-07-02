@@ -17,6 +17,7 @@ export interface Dataset {
   analysisError: string | null
   normalizationStatus: NormalizationStatus
   normalizationError: string | null
+  normalizationFinishedAt: string | null
   createdAt: string
   updatedAt: string
 }
