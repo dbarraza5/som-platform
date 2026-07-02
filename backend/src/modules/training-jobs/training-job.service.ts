@@ -4,6 +4,8 @@ import { getQueueService } from '../../queue'
 import type { QueueMessage } from '../../queue'
 import { env } from '../../config/env'
 
+type TrainingJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
 type CreateTrainingJobData = {
   name: string
   description?: string | null
@@ -68,5 +70,28 @@ export const trainingJobService = {
     }
 
     return trainingJobRepository.findById(trainingJob.id)
+  },
+
+  // Called by the Worker (internalAuth, not a user JWT) to look up a
+  // TrainingJob it only knows the id of.
+  async getByIdInternal(id: string) {
+    const trainingJob = await trainingJobRepository.findById(id)
+    if (!trainingJob) throw new Error('TRAINING_JOB_NOT_FOUND')
+    return trainingJob
+  },
+
+  // Called by the Worker to report that environment preparation (or,
+  // in a later phase, the training itself) failed. The Backend remains
+  // the only writer of TrainingJob.status.
+  async reportStatus(id: string, data: { status: TrainingJobStatus; errorMessage?: string | null }) {
+    const trainingJob = await trainingJobRepository.findById(id)
+    if (!trainingJob) throw new Error('TRAINING_JOB_NOT_FOUND')
+
+    await trainingJobRepository.update(id, {
+      status: data.status,
+      errorMessage: data.errorMessage ?? null,
+    })
+
+    return trainingJobRepository.findById(id)
   },
 }

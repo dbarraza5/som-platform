@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 MessageHandler = Callable[[Dict[str, Any]], None]
 
@@ -11,8 +11,8 @@ class IQueueConsumer(ABC):
         ...
 
     @abstractmethod
-    def consume(self, queue: str, handler: MessageHandler) -> None:
-        """Block indefinitely, delivering each message to handler."""
+    def consume(self, queues: List[str], handler: MessageHandler) -> None:
+        """Block indefinitely, delivering each message from any of the given queues to handler."""
         ...
 
     @abstractmethod

@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import redis
 
@@ -34,13 +34,14 @@ class RedisQueueConsumer(IQueueConsumer):
                 )
                 time.sleep(_CONNECT_DELAY_S)
 
-    def consume(self, queue: str, handler: MessageHandler) -> None:
+    def consume(self, queues: List[str], handler: MessageHandler) -> None:
         while True:
-            result = self._client.brpop(queue, timeout=_BRPOP_TIMEOUT_S)
+            result = self._client.brpop(queues, timeout=_BRPOP_TIMEOUT_S)
             if result is not None:
-                _, raw = result
+                queue_name, raw = result
                 try:
                     message: Dict[str, Any] = json.loads(raw)
+                    logger.info("[WORKER] Mensaje recibido de la cola '%s'.", queue_name)
                     handler(message)
                 except json.JSONDecodeError as exc:
                     logger.error(

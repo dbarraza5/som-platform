@@ -13,3 +13,8 @@ export const createTrainingJobSchema = z.object({
   useLogarithmicForget: z.boolean().optional(),
   threadCount: z.number().int().positive().optional(),
 })
+
+export const reportTrainingJobStatusSchema = z.object({
+  status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
+  errorMessage: z.string().nullable().optional(),
+})

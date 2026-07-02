@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 10.1** — Users can create a `TrainingJob` (`POST /api/projects/:projectId/datasets/:datasetId/training-jobs`), which validates the Dataset is normalized and publishes to an independent `training_jobs` queue. The Worker doesn't consume it yet — see [docs/architecture.md](docs/architecture.md#trainingjob-creation--training-queue-phase-101).
+**Phase 10.2** — The Worker now consumes the `training_jobs` queue: for each `TrainingJob`, it downloads the normalized Dataset, computes `NUMERO_ENTRADAS`, and generates a validated `ConfiguracionRNA.conf` in a permanent per-job directory (`storage/training/<trainingJobId>/`). The `som_` executable itself is still not invoked — see [worker/README.md](worker/README.md#training-environment-preparation-phase-102).

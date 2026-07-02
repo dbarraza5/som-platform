@@ -1,3 +1,5 @@
+from typing import List
+
 from .i_queue_consumer import IQueueConsumer, MessageHandler
 
 # Placeholder — will use boto3 in a future phase.
@@ -11,7 +13,7 @@ class SQSQueueConsumer(IQueueConsumer):
             "Set QUEUE_DRIVER=redis for local development."
         )
 
-    def consume(self, queue: str, handler: MessageHandler) -> None:
+    def consume(self, queues: List[str], handler: MessageHandler) -> None:
         raise NotImplementedError("SQSQueueConsumer is not yet implemented.")
 
     def close(self) -> None:

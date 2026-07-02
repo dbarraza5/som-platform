@@ -151,4 +151,12 @@ export const datasetService = {
 
     return datasetRepository.findById(id)
   },
+
+  // Called by the Worker (internalAuth, not a user JWT) to look up a
+  // Dataset it only knows the id of (e.g. via a TrainingJob's datasetId).
+  async getByIdInternal(id: string) {
+    const dataset = await datasetRepository.findById(id)
+    if (!dataset) throw new Error('DATASET_NOT_FOUND')
+    return dataset
+  },
 }

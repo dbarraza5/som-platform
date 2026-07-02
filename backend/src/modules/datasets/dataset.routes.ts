@@ -30,3 +30,4 @@ internalDatasetRouter.patch(
   validate(reportNormalizationSchema),
   asyncHandler(datasetController.reportNormalization),
 )
+internalDatasetRouter.get('/:id', asyncHandler(datasetController.getByIdInternal))

@@ -104,4 +104,13 @@ export const datasetController = {
       if (!handleDatasetError(err, res)) throw err
     }
   },
+
+  async getByIdInternal(req: Request, res: Response) {
+    try {
+      const dataset = await datasetService.getByIdInternal(req.params.id)
+      success(res, { dataset })
+    } catch (err) {
+      if (!handleDatasetError(err, res)) throw err
+    }
+  },
 }

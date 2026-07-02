@@ -467,13 +467,49 @@ Computed server-side as `gridWidth × gridHeight` rather than accepted from the 
 
 | | Backend | Worker |
 |---|---|---|
-| This phase | Validates the Dataset, creates the `TrainingJob`, publishes to `training_jobs` | Nothing — doesn't know this queue exists yet |
-| Next phase | — | Consumes `training_jobs`, reads the `TrainingJob` + `Dataset`, generates `ConfiguracionRNA.conf`, runs `som_` |
+| Phase 10.1 (this) | Validates the Dataset, creates the `TrainingJob`, publishes to `training_jobs` | Nothing — doesn't know this queue exists yet |
+| Phase 10.2 | Serves `TrainingJob`/`Dataset` lookups + status updates over `/internal` routes | Consumes `training_jobs`, downloads the normalized Dataset, generates `ConfiguracionRNA.conf` |
+| Later phase | — | Actually runs `som_` |
 
 ### Training queue environment variable
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TRAINING_QUEUE_NAME` | `training_jobs` | Queue/list name for training requests — independent of `QUEUE_NAME` (normalization) |
+
+---
+
+## Training Environment Preparation (Phase 10.2)
+
+The Worker now consumes `training_jobs` (alongside `som_jobs`, same Redis connection — `dispatch_message()` routes by the message's `operation` field) and prepares everything `som_` needs to eventually run, **without running it**. Full details, including the exact `.conf` generation logic and the reasoning behind not generating `.xml`, are in [worker/README.md](../worker/README.md#training-environment-preparation-phase-102).
+
+```
+TRAIN message { trainingJobId, datasetId }   ← Phase 10.1, minimal by design
+        │
+        ▼
+  Worker fetches TrainingJob + Dataset from the Backend  (never trusts message contents beyond the id)
+        │
+        ▼
+  storage/training/<trainingJobId>/            ← new, permanent (not temp/) — same storage_data volume
+        │
+        ▼
+  StorageProvider.download(normalized.csv → DatosEntrenamiento.csv)
+        │
+        ▼
+  NUMERO_ENTRADAS = count columns in DatosEntrenamiento.csv   (never Dataset.columns from the DB)
+        │
+        ▼
+  Generate + validate ConfiguracionRNA.conf
+        │
+        ▼
+  TrainingJob.status unchanged (still QUEUED) — FAILED only if any step above fails
+```
+
+Two Backend endpoints were added to support this, both `internalAuth`-protected like the Phase 7.6 normalization callback:
+- `GET /api/internal/training-jobs/:id` and `GET /api/internal/datasets/:id` — read-only lookups the Worker uses to resolve the message into full records.
+- `PATCH /api/internal/training-jobs/:id/status` — how the Worker reports a preparation failure; the Backend remains the only writer of `TrainingJob.status`.
+
+### Why the training directory isn't temporary
+`temp/job-<datasetId>/` (normalization, Phase 7.5–7.6) is deleted once its output is durably stored elsewhere. `storage/training/<trainingJobId>/` is the opposite: it **is** the durable location, kept indefinitely, because a future phase's automatic resume needs to find `pesosRNA.csv` / `statusRNA.dat` there after a Worker restart mid-training.
 
 ---
 
@@ -494,6 +530,7 @@ Computed server-side as `gridWidth × gridHeight` rather than accepted from the 
 | 8     | Frontend: Dataset detail view redesign | Complete  |
 | 9     | Worker: SOM executable integration (preparation only, no training yet) | Complete |
 | 10.1  | TrainingJob creation + training queue (Backend only, Worker doesn't consume yet) | Complete |
-| 10.2+ | Worker: consume training queue, run som_, track progress | Pending |
+| 10.2  | Worker: consume training queue, prepare training directory + ConfiguracionRNA.conf (no som_ execution yet) | Complete |
+| 10.3+ | Worker: run som_, track progress | Pending |
 | 11    | Results visualization                | Pending     |
 | 12    | AWS deployment                       | Pending     |

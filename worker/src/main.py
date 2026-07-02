@@ -4,7 +4,7 @@ import sys
 
 from .config.settings import settings
 from .queue.factory import create_queue_consumer
-from .services.message_handler import handle_message
+from .services.dispatcher import dispatch_message
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -19,9 +19,10 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     logger.info("[WORKER] Iniciando...")
     logger.info(
-        "[WORKER] Configuración cargada. QUEUE_DRIVER=%s  QUEUE_NAME=%s",
+        "[WORKER] Configuración cargada. QUEUE_DRIVER=%s  QUEUE_NAME=%s  TRAINING_QUEUE_NAME=%s",
         settings.QUEUE_DRIVER,
         settings.QUEUE_NAME,
+        settings.TRAINING_QUEUE_NAME,
     )
 
     consumer = create_queue_consumer()
@@ -37,9 +38,11 @@ def main() -> None:
     logger.info("[WORKER] Conectando a %s...", settings.QUEUE_DRIVER.upper())
     consumer.connect()
     logger.info("[WORKER] Conectado correctamente.")
-    logger.info("[WORKER] Esperando trabajos en cola '%s'...", settings.QUEUE_NAME)
 
-    consumer.consume(settings.QUEUE_NAME, handle_message)
+    queues = [settings.QUEUE_NAME, settings.TRAINING_QUEUE_NAME]
+    logger.info("[WORKER] Esperando trabajos en colas %s...", queues)
+
+    consumer.consume(queues, dispatch_message)
 
 
 if __name__ == "__main__":

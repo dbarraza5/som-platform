@@ -20,6 +20,10 @@ function handleTrainingJobError(err: unknown, res: Response): boolean {
       error(res, 'Dataset normalization failed; cannot start training', 422)
       return true
     }
+    if (err.message === 'TRAINING_JOB_NOT_FOUND') {
+      error(res, 'Training job not found', 404)
+      return true
+    }
   }
   return false
 }
@@ -34,6 +38,24 @@ export const trainingJobController = {
         req.body,
       )
       success(res, { trainingJob }, 201)
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
+  async getByIdInternal(req: Request, res: Response) {
+    try {
+      const trainingJob = await trainingJobService.getByIdInternal(req.params.id)
+      success(res, { trainingJob })
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
+  async reportStatus(req: Request, res: Response) {
+    try {
+      const trainingJob = await trainingJobService.reportStatus(req.params.id, req.body)
+      success(res, { trainingJob })
     } catch (err) {
       if (!handleTrainingJobError(err, res)) throw err
     }
