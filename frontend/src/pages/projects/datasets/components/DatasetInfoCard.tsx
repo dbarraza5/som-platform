@@ -20,7 +20,11 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 export default function DatasetInfoCard({ dataset }: { dataset: Dataset }) {
   const status = getDatasetPipelineStatus(dataset)
   const meta = DATASET_STATUS_META[status]
-  const errorMessage = dataset.analysisError ?? dataset.normalizationError
+  // The backend doesn't clear analysisError/normalizationError/normalizationFinishedAt
+  // when a dataset is re-uploaded after a failure, so those fields can hold stale data
+  // from a previous attempt. Only trust them when the current status still reflects them.
+  const errorMessage = status === 'FAILED' ? dataset.analysisError ?? dataset.normalizationError : null
+  const showFinishedAt = status === 'COMPLETED' || status === 'FAILED'
 
   return (
     <Card>
@@ -56,7 +60,7 @@ export default function DatasetInfoCard({ dataset }: { dataset: Dataset }) {
         <Field
           label="Normalización finalizada"
           value={
-            dataset.normalizationFinishedAt ? (
+            showFinishedAt && dataset.normalizationFinishedAt ? (
               formatDate(dataset.normalizationFinishedAt)
             ) : (
               <Placeholder text="Aún no ha finalizado" />

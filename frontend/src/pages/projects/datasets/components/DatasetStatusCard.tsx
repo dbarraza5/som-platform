@@ -25,6 +25,9 @@ export default function DatasetStatusCard({ dataset, upload }: DatasetStatusCard
   const meta = DATASET_STATUS_META[status]
   const Icon = meta.icon
   const errorMessage = dataset.analysisError ?? dataset.normalizationError
+  // A FAILED dataset already has an originalFilename, but it must remain
+  // possible to upload a corrected CSV instead of forcing a brand new Dataset.
+  const canUpload = status === 'NO_FILE' || status === 'FAILED'
 
   return (
     <Card>
@@ -57,36 +60,40 @@ export default function DatasetStatusCard({ dataset, upload }: DatasetStatusCard
           </div>
         </div>
 
-        {status === 'NO_FILE' && (
-          <div className="flex flex-col gap-3 rounded-md border border-dashed p-4 sm:flex-row sm:items-center">
-            <label
-              htmlFor="csv-upload"
-              className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-            >
-              <FileUp className="h-4 w-4 shrink-0" />
-              {upload.selectedFile ? upload.selectedFile.name : 'Seleccionar archivo CSV…'}
-              <input
-                id="csv-upload"
-                ref={upload.fileInputRef}
-                type="file"
-                accept=".csv"
-                className="sr-only"
-                onChange={upload.onFileChange}
-                disabled={upload.isUploading}
-              />
-            </label>
-            <Button
-              onClick={upload.onUpload}
-              disabled={!upload.selectedFile || upload.isUploading}
-              className="shrink-0"
-            >
-              {upload.isUploading ? 'Subiendo...' : 'Subir y procesar'}
-            </Button>
+        {canUpload && (
+          <div className="space-y-2">
+            {status === 'FAILED' && (
+              <p className="text-sm text-muted-foreground">
+                Puedes subir un nuevo archivo para reintentar.
+              </p>
+            )}
+            <div className="flex flex-col gap-3 rounded-md border border-dashed p-4 sm:flex-row sm:items-center">
+              <label
+                htmlFor="csv-upload"
+                className="flex flex-1 cursor-pointer items-center gap-2 rounded-md border px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+              >
+                <FileUp className="h-4 w-4 shrink-0" />
+                {upload.selectedFile ? upload.selectedFile.name : 'Seleccionar archivo CSV…'}
+                <input
+                  id="csv-upload"
+                  ref={upload.fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  className="sr-only"
+                  onChange={upload.onFileChange}
+                  disabled={upload.isUploading}
+                />
+              </label>
+              <Button
+                onClick={upload.onUpload}
+                disabled={!upload.selectedFile || upload.isUploading}
+                className="shrink-0"
+              >
+                {upload.isUploading ? 'Subiendo...' : 'Subir y procesar'}
+              </Button>
+            </div>
+            {upload.error && <p className="text-sm text-destructive">{upload.error}</p>}
           </div>
-        )}
-
-        {status === 'NO_FILE' && upload.error && (
-          <p className="text-sm text-destructive">{upload.error}</p>
         )}
       </CardContent>
     </Card>
