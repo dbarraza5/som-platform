@@ -391,6 +391,22 @@ This route (`internalDatasetRouter` in `dataset.routes.ts`) is mounted separatel
 
 ---
 
+## Worker: SOM Executable Integration (Phase 9)
+
+Preparation only — **no training runs yet, and nothing in `message_handler.py` invokes the executable**. This phase copies the SOM training binary into the Worker, confirms it runs in the container, and documents its file-based protocol so the actual training integration (next phase) doesn't have to rediscover it. Full details, including the exact config file formats and a `TrainingJob`-field mapping table, are in [worker/README.md](../worker/README.md#som-training-executable-phase-9).
+
+```
+worker/executables/som_        ← statically-linked ELF, no shared-lib dependencies
+```
+
+Summary of what was found:
+- Running it with no `DatosEntrenamiento.csv` present prints `Fichero no encontrado` and exits `0` — expected for this phase, not an error.
+- It generates `ConfiguracionRNA.conf` (created once, then treated as authoritative input) and `ConfiguracionRNA.xml` (rewritten every run as a status report). Every tunable value in `.conf` already has a matching field on `TrainingJob` — no Prisma changes needed for the next phase.
+- Reading the binary's embedded strings and C++ symbols (it isn't stripped) revealed further files it's expected to produce during real training — `pesosRNA.csv` (model weights), `statusRNA.dat` (progress/checkpoint, backing a resume capability via `GestionadorSOM::reanudarEntrenamiento`), and `activacion_rna.csv` (per-record neuron activation) — plus a stdout progress line format (`"total: %d | iteracion: %d | por: %f| ciclo: %d"`) that the next phase can parse to update `TrainingJob.progress`.
+- Open question carried into the next phase: whether the binary's CSV reader accepts the same semicolon-delimited, headerless format `NormalizationService` (Phase 7.5) already produces.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -405,6 +421,8 @@ This route (`internalDatasetRouter` in `dataset.routes.ts`) is mounted separatel
 | 7.4   | Worker downloads dataset via StorageProvider | Complete |
 | 7.5   | Normalization algorithm integration (NormalizationService) | Complete |
 | 7.6   | Worker publishes results via StorageProvider + notifies Backend | Complete |
-| 8     | SOM worker integration               | Pending     |
-| 9     | Results visualization                | Pending     |
+| 8     | Frontend: Dataset detail view redesign | Complete  |
+| 9     | Worker: SOM executable integration (preparation only, no training yet) | Complete |
+| 10    | SOM training integration              | Pending    |
+| 11    | Results visualization                | Pending     |
 | 10    | AWS deployment                       | Pending     |

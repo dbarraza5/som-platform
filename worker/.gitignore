@@ -2,3 +2,6 @@ temp/
 __pycache__/
 *.pyc
 .env
+
+# The SOM training binary is not committed — see README.md
+executables/

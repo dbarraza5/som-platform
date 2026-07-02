@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 7.6** — Normalization job fully closed out: the worker publishes `normalized.csv` / `dimensions.xml` via `StorageProvider`, cleans up its temp directory, and notifies the backend so it can update `Dataset.normalizationStatus`.
+**Phase 9** — The SOM training executable (`worker/executables/som_`) is integrated into the Worker's Docker image and verified to run, but is not yet wired into the job pipeline — see [worker/README.md](worker/README.md) for what it expects and produces.
