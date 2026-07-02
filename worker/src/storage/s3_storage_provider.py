@@ -7,6 +7,11 @@ class S3StorageProvider(IStorageProvider):
             "S3StorageProvider is not yet implemented. Set STORAGE_DRIVER=local for local development."
         )
 
+    def upload(self, key: str, src_path: str) -> None:
+        raise NotImplementedError(
+            "S3StorageProvider is not yet implemented. Set STORAGE_DRIVER=local for local development."
+        )
+
     def exists(self, key: str) -> bool:
         raise NotImplementedError(
             "S3StorageProvider is not yet implemented. Set STORAGE_DRIVER=local for local development."

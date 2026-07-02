@@ -9,6 +9,8 @@ class Settings:
     LOG_LEVEL: str = os.environ.get("LOG_LEVEL", "INFO")
     STORAGE_DRIVER: str = os.environ.get("STORAGE_DRIVER", "local")
     STORAGE_LOCAL_PATH: str = os.environ.get("STORAGE_LOCAL_PATH", "/app/storage")
+    BACKEND_URL: str = os.environ.get("BACKEND_URL", "http://backend:3000")
+    INTERNAL_API_KEY: str = os.environ.get("INTERNAL_API_KEY", "dev-internal-api-key-change-in-production")
 
 
 settings = Settings()

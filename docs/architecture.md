@@ -242,10 +242,9 @@ Worker receives QueueMessage (storageKey)
         │
         ▼
   Validate (file exists, size > 0)
-        │
-        ▼
-  Cleanup temp dir
 ```
+
+> Temp dir cleanup was deferred starting Phase 7.5, since the same directory holds the normalization output until it's published back to storage (Phase 7.6). See below.
 
 ### Shared storage volume
 Backend and worker mount the same Docker named volume:
@@ -297,9 +296,6 @@ handle_message()
         │
         ▼
   Validate both files exist and size > 0
-        │
-        ▼
-  Cleanup temp dir
 ```
 
 ### Output filenames
@@ -308,8 +304,90 @@ Fixed regardless of the input filename: `normalized.csv` and `dimensions.xml`. T
 ### Dependencies
 Added to `worker/requirements.txt`: `pandas` and `numpy` (the algorithm's CSV parsing, casting, and min-max normalization rely on both). No Dockerfile changes were needed — both ship as prebuilt wheels for `python:3.12-slim`.
 
-### Not yet implemented
-Uploading `normalized.csv` / `dimensions.xml` back to storage, updating `Dataset.normalizationStatus` in PostgreSQL, and any REST callback to the backend. The files are validated and then discarded with the rest of the temp directory, same as before this phase.
+### Not yet implemented (as of Phase 7.5)
+Uploading `normalized.csv` / `dimensions.xml` back to storage, updating `Dataset.normalizationStatus` in PostgreSQL, and any REST callback to the backend. Implemented in Phase 7.6 below.
+
+---
+
+## Worker Publishes Results (Phase 7.6)
+
+Once `NormalizationService` produces `normalized.csv` and `dimensions.xml` in the temp job directory, the worker publishes them permanently, cleans up, and reports the outcome to the backend — closing out the normalization job.
+
+```
+handle_message()
+        │
+  normalized.csv / dimensions.xml generated (Phase 7.5)
+        │
+        ▼
+  storage.upload(normalizedKey, normalized.csv)
+  storage.upload(dimensionsKey, dimensions.xml)
+        │
+        ▼
+  storage.exists(...) for both keys  ← verify, never assume
+        │
+        ▼
+  shutil.rmtree(temp/job-<datasetId>/)   ← only after both uploads verified
+        │
+        ▼
+  BackendNotifier.notify_normalization_result(datasetId, COMPLETED)
+        │
+        ▼
+  PATCH /api/internal/datasets/:id/normalization   (X-Internal-Api-Key)
+        │
+        ▼
+  Backend updates Dataset:
+    normalizationStatus = COMPLETED
+    normalizationFinishedAt = now()
+    normalizationError = null
+        │
+        ▼
+  Worker waits for the next job
+```
+
+If anything fails (upload, temp cleanup, or an earlier step like download/normalization), the temp directory is **left in place** for diagnosis and the worker still calls `BackendNotifier` — this time with `status=FAILED` and the error message — so `Dataset.normalizationStatus` never gets stuck on `PENDING`/`PROCESSING`.
+
+### Same StorageProvider, both directions
+The worker's `IStorageProvider` (Phase 7.4) gained an `upload(key, src_path)` method, mirroring `download(key, dest_path)`. It's the same abstraction used to fetch `original.csv`, just writing instead of reading — the worker never builds storage paths or touches the shared volume by hand outside of this interface.
+
+```
+IStorageProvider
+├── LocalStorageProvider.upload()  → shutil.copy2 into storage_data volume
+└── S3StorageProvider.upload()     → NotImplementedError (production placeholder)
+```
+
+Result keys follow the same convention as the original file:
+```
+projects/<projectId>/datasets/<datasetId>/original.csv    (Phase 7.4)
+projects/<projectId>/datasets/<datasetId>/normalized.csv   (Phase 7.6)
+projects/<projectId>/datasets/<datasetId>/dimensions.xml   (Phase 7.6)
+```
+
+### Temporary vs. permanent storage
+| | `temp/job-<datasetId>/` | `storage_data` volume (via StorageProvider) |
+|---|---|---|
+| Lifetime | One job; deleted once results are confirmed published | Permanent, survives worker restarts |
+| Purpose | Scratch space for download + algorithm output | Source of truth the backend/frontend/future SOM training read from |
+| On failure | Kept for diagnosis | Nothing partial is left — uploads are verified individually |
+
+### Worker → Backend notification
+The worker never touches PostgreSQL. It calls a backend-owned endpoint and the backend is the only writer of `Dataset.normalizationStatus`:
+
+```
+PATCH /api/internal/datasets/:id/normalization
+Headers: X-Internal-Api-Key: <shared secret>
+Body:    { "status": "COMPLETED" | "FAILED", "error"?: string }
+```
+
+This route (`internalDatasetRouter` in `dataset.routes.ts`) is mounted separately from the user-facing `datasetRouter` and is protected by `internalAuth` middleware (a shared-secret header check) instead of the JWT `authenticate` middleware — a worker has no user session to present.
+
+### Worker environment variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BACKEND_URL` | `http://backend:3000` | Base URL the worker calls to report job results |
+| `INTERNAL_API_KEY` | (shared with backend) | Sent as `X-Internal-Api-Key`; must match the backend's value |
+
+### Error handling
+`BackendNotifier.notify_normalization_result()` catches its own `requests` exceptions and returns `False` rather than raising — a backend outage during notification is logged but never crashes the worker or leaves it unable to pick up the next job.
 
 ---
 
@@ -326,6 +404,7 @@ Uploading `normalized.csv` / `dimensions.xml` back to storage, updating `Dataset
 | 7.3   | Python worker infrastructure         | Complete    |
 | 7.4   | Worker downloads dataset via StorageProvider | Complete |
 | 7.5   | Normalization algorithm integration (NormalizationService) | Complete |
+| 7.6   | Worker publishes results via StorageProvider + notifies Backend | Complete |
 | 8     | SOM worker integration               | Pending     |
 | 9     | Results visualization                | Pending     |
 | 10    | AWS deployment                       | Pending     |

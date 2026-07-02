@@ -8,6 +8,11 @@ class IStorageProvider(ABC):
         ...
 
     @abstractmethod
+    def upload(self, key: str, src_path: str) -> None:
+        """Upload the local file at src_path to storage key."""
+        ...
+
+    @abstractmethod
     def exists(self, key: str) -> bool:
         """Check whether a file exists at the given storage key."""
         ...

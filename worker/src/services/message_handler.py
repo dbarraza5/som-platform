@@ -1,8 +1,10 @@
 import json
 import logging
 import os
+import shutil
 
 from ..storage.factory import get_storage_provider
+from .backend_notifier import get_backend_notifier
 from .normalization_service import NormalizationService
 
 logger = logging.getLogger(__name__)
@@ -13,6 +15,7 @@ _DELIMITER = ";"
 
 def handle_message(message: dict) -> None:
     dataset_id = message.get("datasetId", "unknown")
+    project_id = message.get("projectId", "unknown")
     storage_key = message.get("storageKey")
 
     logger.info("[WORKER] Trabajo recibido. datasetId=%s", dataset_id)
@@ -24,6 +27,7 @@ def handle_message(message: dict) -> None:
 
     temp_dir = os.path.join(_TEMP_BASE, f"job-{dataset_id}")
     temp_file = os.path.join(temp_dir, "original.csv")
+    notifier = get_backend_notifier()
 
     try:
         logger.info("[WORKER] Descargando Dataset... storageKey=%s", storage_key)
@@ -55,9 +59,41 @@ def handle_message(message: dict) -> None:
         logger.info("[WORKER] Archivo generado: %s", result.normalized_csv_path)
         logger.info("[WORKER] Archivo generado: %s", result.dimensions_xml_path)
 
+        normalized_key = f"projects/{project_id}/datasets/{dataset_id}/normalized.csv"
+        dimensions_key = f"projects/{project_id}/datasets/{dataset_id}/dimensions.xml"
+
+        logger.info("[WORKER] Publicando normalized.csv...")
+        storage.upload(normalized_key, result.normalized_csv_path)
+        if not storage.exists(normalized_key):
+            raise RuntimeError(f"No se pudo verificar la publicación de: {normalized_key}")
+
+        logger.info("[WORKER] Publicando dimensions.xml...")
+        storage.upload(dimensions_key, result.dimensions_xml_path)
+        if not storage.exists(dimensions_key):
+            raise RuntimeError(f"No se pudo verificar la publicación de: {dimensions_key}")
+
+        logger.info("[WORKER] Archivos almacenados correctamente.")
+
+        logger.info("[WORKER] Eliminando archivos temporales...")
+        shutil.rmtree(temp_dir)
+
+        logger.info("[WORKER] Notificando Backend...")
+        notifier.notify_normalization_result(dataset_id, status="COMPLETED")
+
+        logger.info("[WORKER] Normalización finalizada correctamente.")
+        return
+
     except FileNotFoundError as exc:
-        logger.error("[WORKER] Archivo no encontrado en el storage: %s", exc)
+        error_message = f"Archivo no encontrado en el storage: {exc}"
+        logger.error("[WORKER] %s", error_message)
     except OSError as exc:
-        logger.error("[WORKER] Error de escritura en directorio temporal: %s", exc)
+        error_message = f"Error de E/S durante el procesamiento: {exc}"
+        logger.error("[WORKER] %s", error_message)
     except Exception as exc:
-        logger.error("[WORKER] Error inesperado durante la normalización: %s", exc)
+        error_message = f"Error inesperado durante la normalización: {exc}"
+        logger.error("[WORKER] %s", error_message)
+
+    # Cualquier fallo llega aquí: el directorio temporal se conserva para
+    # diagnóstico y el Backend se entera del fallo.
+    logger.info("[WORKER] Notificando Backend del fallo...")
+    notifier.notify_normalization_result(dataset_id, status="FAILED", error_message=error_message)

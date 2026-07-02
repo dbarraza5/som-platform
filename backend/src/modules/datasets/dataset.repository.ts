@@ -29,6 +29,7 @@ type UpdateAnalysisData = {
 type UpdateNormalizationData = {
   normalizationStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
   normalizationError?: string | null
+  normalizationFinishedAt?: Date | null
 }
 
 export const datasetRepository = {

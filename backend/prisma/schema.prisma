@@ -67,6 +67,7 @@ model Dataset {
   analysisError        String?
   normalizationStatus  NormalizationStatus @default(PENDING)
   normalizationError   String?
+  normalizationFinishedAt DateTime?
   createdAt            DateTime            @default(now())
   updatedAt        DateTime      @updatedAt
   project          Project       @relation(fields: [projectId], references: [id])

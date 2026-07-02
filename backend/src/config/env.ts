@@ -17,4 +17,5 @@ export const env = {
   REDIS_HOST: process.env.REDIS_HOST ?? 'redis',
   REDIS_PORT: parseInt(process.env.REDIS_PORT ?? '6379', 10),
   QUEUE_NAME: process.env.QUEUE_NAME ?? 'som_jobs',
+  INTERNAL_API_KEY: process.env.INTERNAL_API_KEY ?? 'dev-internal-api-key-change-in-production',
 }

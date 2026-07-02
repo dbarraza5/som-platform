@@ -15,6 +15,11 @@ type UpdateDatasetData = {
   description?: string | null
 }
 
+type ReportNormalizationData = {
+  status: 'COMPLETED' | 'FAILED'
+  error?: string | null
+}
+
 async function assertProjectOwnership(projectId: string, userId: string) {
   const project = await projectRepository.findById(projectId)
   if (!project) throw new Error('PROJECT_NOT_FOUND')
@@ -128,6 +133,21 @@ export const datasetService = {
         })
       }
     }
+
+    return datasetRepository.findById(id)
+  },
+
+  // Called by the Worker (via internal-auth, not a user JWT) once it has
+  // published (or failed to publish) normalized.csv / dimensions.xml.
+  async reportNormalizationResult(id: string, data: ReportNormalizationData) {
+    const dataset = await datasetRepository.findById(id)
+    if (!dataset) throw new Error('DATASET_NOT_FOUND')
+
+    await datasetRepository.updateNormalization(id, {
+      normalizationStatus: data.status,
+      normalizationError: data.status === 'FAILED' ? (data.error ?? 'Normalization failed') : null,
+      normalizationFinishedAt: new Date(),
+    })
 
     return datasetRepository.findById(id)
   },

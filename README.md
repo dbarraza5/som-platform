@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 7.5** — Queue + storage abstractions, worker downloads the dataset, and normalization algorithm integrated (NormalizationService generates `normalized.csv` / `dimensions.xml` in the temp job directory).
+**Phase 7.6** — Normalization job fully closed out: the worker publishes `normalized.csv` / `dimensions.xml` via `StorageProvider`, cleans up its temp directory, and notifies the backend so it can update `Dataset.normalizationStatus`.

@@ -18,5 +18,12 @@ class LocalStorageProvider(IStorageProvider):
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         shutil.copy2(src, dest_path)
 
+    def upload(self, key: str, src_path: str) -> None:
+        if not os.path.isfile(src_path):
+            raise FileNotFoundError(f"Local file not found: {src_path}")
+        dest = self._resolve(key)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy2(src_path, dest)
+
     def exists(self, key: str) -> bool:
         return os.path.isfile(self._resolve(key))
