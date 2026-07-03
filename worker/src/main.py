@@ -5,6 +5,7 @@ import sys
 from .config.settings import settings
 from .queue.factory import create_queue_consumer
 from .services.dispatcher import dispatch_message
+from .services.training_recovery_service import recover_interrupted_trainings
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
@@ -38,6 +39,8 @@ def main() -> None:
     logger.info("[WORKER] Conectando a %s...", settings.QUEUE_DRIVER.upper())
     consumer.connect()
     logger.info("[WORKER] Conectado correctamente.")
+
+    recover_interrupted_trainings()
 
     queues = [settings.QUEUE_NAME, settings.TRAINING_QUEUE_NAME]
     logger.info("[WORKER] Esperando trabajos en colas %s...", queues)

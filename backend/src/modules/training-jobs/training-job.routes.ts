@@ -16,6 +16,7 @@ trainingJobRouter.post('/', validate(createTrainingJobSchema), asyncHandler(trai
 // via a shared API key (internalAuth), never a user JWT.
 export const internalTrainingJobRouter = Router()
 internalTrainingJobRouter.use(internalAuth)
+internalTrainingJobRouter.get('/', asyncHandler(trainingJobController.listInternal))
 internalTrainingJobRouter.get('/:id', asyncHandler(trainingJobController.getByIdInternal))
 internalTrainingJobRouter.patch(
   '/:id/status',

@@ -387,7 +387,7 @@ This phase does **not** implement a real progress percentage. `progress` is sent
 
 ### Detecting a stalled `statusRNA.dat`
 
-Each tick compares `(ciclos, iteracion)` against the previous successful read. If unchanged for `_STALE_TICKS_WARNING_THRESHOLD` (`3`) consecutive ticks, the Worker logs a `WARNING` — nothing else. Per this phase's explicit scope, no recovery action is taken; automatic recovery is Phase 10.5.
+Each tick compares `(ciclos, iteracion)` against the previous successful read. If unchanged for `_STALE_TICKS_WARNING_THRESHOLD` (`3`) consecutive ticks, the Worker logs a `WARNING` — nothing else. Per this phase's explicit scope, no recovery action is taken while `som_` is still running; that only ever happens after a Worker restart (Phase 10.5, below) — a stale-but-still-running process is not touched.
 
 ### Determining completion
 
@@ -403,3 +403,91 @@ This directly closes the gap flagged in Phase 10.3: `som_` was found to exit `0`
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TRAINING_STATUS_POLL_INTERVAL_S` | `5` | Seconds between `statusRNA.dat` reads while `som_` is running |
+
+---
+
+## Automatic Recovery (Phase 10.5)
+
+If the Worker restarts while a training is in progress — a crash, a redeploy, `docker compose restart` — the `som_` child process dies with it (it's a direct child of the Worker's own process, killed together whenever the container is). This phase makes the Worker notice that on its next startup and pick the training back up, using `som_`'s own native resume support rather than starting over.
+
+### Shared code, not duplicated logic
+
+The actual "run `som_`, poll `statusRNA.dat`, decide `COMPLETED`/`FAILED`" logic (Phases 10.3/10.4) moved out of `training_message_handler.py` into `training_runner.py`'s `run_and_monitor(client, training_job_id, training_dir)`. Both a brand-new `TRAIN` message and a recovered one call the exact same function once the working directory exists — the only difference is who calls it and whether environment preparation (Phase 10.2: download the dataset, generate `ConfiguracionRNA.conf`) runs first.
+
+```
+New TRAIN message                          Worker startup
+        │                                          │
+        ▼                                          ▼
+handle_training_message()              recover_interrupted_trainings()
+        │                                          │
+  prepare environment (10.2)            find TrainingJobs with status=RUNNING
+        │                                          │
+        └──────────────┬───────────────────────────┘
+                        ▼
+              training_runner.run_and_monitor()
+```
+
+### What happens on startup
+
+`main.py` calls `recover_interrupted_trainings()` right after connecting to Redis, before the Worker starts consuming either queue — so any recovery work finishes before new jobs are picked up:
+
+```
+[WORKER] Buscando entrenamientos pendientes de recuperación.
+[WORKER] TrainingJob encontrado. trainingJobId=...
+[WORKER] Verificando archivos del entrenamiento.
+[WORKER] statusRNA.dat encontrado.
+[WORKER] Reanudando entrenamiento. trainingJobId=... intento=1/3
+[WORKER] Iniciando entrenamiento...
+...
+[WORKER] Entrenamiento recuperado correctamente. trainingJobId=...
+```
+
+`GET /api/internal/training-jobs?status=RUNNING` (new endpoint, same `internalAuth` pattern as everything else) is how the Worker finds candidates — a `TrainingJob` only ends up `RUNNING` in the database while `som_` is actually meant to be executing, so this list is exactly "trainings that didn't get a chance to reach `COMPLETED`/`FAILED` before something died."
+
+### Is it already running? (`TrainingExecutionService.is_running`)
+
+Before touching anything, the Worker checks whether a `som_` process is already alive for that `TrainingJob` — the phase's "si ya existe, no hacer nada" requirement. `TrainingExecutionService.run()` now writes a `.worker.lock` file (just the PID) into the training directory for the duration of the process, removed in a `finally` block regardless of success or failure. `is_running()` reads that file and calls `os.kill(pid, 0)` (checks liveness without sending a real signal) to tell "the lock is stale from a killed process" apart from "there's a real `som_` still going."
+
+In this project's actual deployment (`restart: unless-stopped`, one Worker process per container), a full container restart always kills every child process too — so in practice this check will basically never find a live process. It's implemented anyway because it's cheap, correctly matches the spec, and stops mattering the moment the Worker ever runs with more headroom (multiple replicas, a supervisor that restarts the Python process without killing children, etc.).
+
+The lock file itself never leaks into the "generated files" diff (`training_runner.py`'s before/after `os.listdir()` comparison): it's created and removed entirely within `TrainingExecutionService.run()`, so it's gone by the time either place-in-time snapshot is taken.
+
+### Required files to resume
+
+```
+ConfiguracionRNA.conf     ← Phase 10.2, never regenerated
+DatosEntrenamiento.csv    ← Phase 10.2, never re-downloaded
+statusRNA.dat             ← written by som_ itself — the actual checkpoint
+```
+
+If the training directory itself is missing, or any of these three files is missing, the Worker logs the specific missing filename(s), reports the `TrainingJob` `FAILED` with a clear message, and does **not** attempt to run `som_` — an incomplete environment isn't safe to resume, and this phase explicitly excludes trying to regenerate what's missing (that would mean re-downloading the dataset and re-creating the config, which is Phase 10.2's job on a fresh message, not recovery's).
+
+### Resuming touches nothing
+
+Per the phase's explicit instruction, recovery only ever re-invokes `som_` in the existing directory — via the same `TrainingExecutionService`/`run_and_monitor` used for a fresh run. It never re-downloads the dataset, never regenerates `ConfiguracionRNA.conf`, and never writes to `statusRNA.dat` itself. Whatever `som_` does with its own checkpoint on the next launch is entirely up to `som_`.
+
+### Retry limit
+
+`TrainingJob.recoveryAttempts` (new `Int`, default `0`, migration `20260705000000`) persists across Worker restarts specifically because the DB is the only thing that survives one — an in-memory counter would reset to `0` on every crash, defeating the entire point of a retry limit. Before attempting a resume, the Worker compares it against `MAX_RECOVERY_ATTEMPTS` (default `3`); at or past the limit, it reports `FAILED` ("Se alcanzó el límite de intentos de recuperación") instead of trying again. On each attempt actually taken, the Worker increments the count via `PATCH /api/internal/training-jobs/:id/status` (extended this phase to accept `recoveryAttempts`) *before* calling `run_and_monitor` — so a crash during the resumed run itself still leaves the incremented count behind for the next startup to see.
+
+### What was actually verified
+
+Two real, end-to-end scenarios against the running stack (not simulated):
+
+1. **A genuinely early interruption.** Let a `TrainingJob` complete normally, then hand-edited its `statusRNA.dat` to a plausible mid-training snapshot (`termino_entrenarse = no`, small `ciclos`/`iteracion` values consistent with an early stop), set the job back to `RUNNING`, and restarted the Worker. Recovery found it, verified all three files, incremented `recoveryAttempts` to `1`, and successfully re-ran `som_` — the job reached `COMPLETED` with `progress: 100`, converging to the same `ciclos: 41` / `iteracion: 205` every other run of this dataset reaches. `som_` did not error, hang, or need any special handling.
+
+2. **A real interruption from a real crash.** Created a `TrainingJob` and killed the Worker container (`docker compose kill`) ~1 second later, mid-preparation — before `som_` had even written `statusRNA.dat` yet. On restart, recovery correctly found the file missing, logged `Faltan archivos necesarios para reanudar: statusRNA.dat`, and reported the job `FAILED` without attempting to resume — exactly the documented "missing file" path, exercised by an actual crash rather than a contrived one.
+
+### An honest caveat about what "resume" means under the hood
+
+A third, deliberately adversarial test hand-edited a **completed** run's `statusRNA.dat` to `termino_entrenarse = no` while leaving `ciclos`/`iteracion` at their final values (`41`/`205` — i.e., a self-contradictory state no real interruption would ever produce, since a real interruption stops *before* reaching those numbers). Re-running `som_` against that file did not crash, but got stuck printing the same progress line (`total: 250 | iteracion: 205 | por: 0.820000 | ciclo: 41`) in a tight loop indefinitely — over three minutes with no change, until manually killed. `run_and_monitor` handled this correctly (no crash, no hang in *our* code, a clear `FAILED` once the process was killed, `errorMessage` capturing the exit code, the stuck `statusRNA.dat` contents, and the repeated stdout for diagnosis) — but **there is currently no timeout on `som_` itself**. A hung `som_` process — for this reason or any other — blocks the Worker (single-threaded, one job at a time) indefinitely unless something external kills it. Worth a watchdog/timeout in a future phase; out of scope here.
+
+That same test incidentally confirmed the stdout progress line format Phase 9 could only find as a string constant in the binary: `total: %d | iteracion: %d | por: %f | ciclo: %d`, where `total` = `NUMERO_LIMITE_ITERACIONES × row count` (`50 × 5 = 250`) and `por` = `iteracion / total`. Still not used for anything here — Phase 10.4's "no stdout, no `NUMERO_LIMITE_ITERACIONES`" rule for progress stands — but now backed by a confirmed formula instead of just a string constant, for whenever a future phase implements real progress percentages.
+
+Separately, it's not fully possible to distinguish, from black-box testing alone, whether `som_` truly resumes iteration-by-iteration from a checkpoint or performs a warm-started fresh run that happens to converge to the same point — both produce identical final `statusRNA.dat` values for this project's small test dataset. What is conclusively verified: `som_` does react differently depending on whether prior state exists (confirmed by the hang above, which only happens with pre-existing files), it completes successfully given a *consistent* partial checkpoint, and the Worker's own responsibilities (detect, verify, retry-limit, re-invoke, report) all behave exactly as specified regardless of `som_`'s internal resume mechanics.
+
+### Worker environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_RECOVERY_ATTEMPTS` | `3` | How many times the Worker will try to resume the same TrainingJob across restarts before giving up (`FAILED`) |

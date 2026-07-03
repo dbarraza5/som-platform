@@ -9,7 +9,7 @@ compartida que BackendNotifier (Fase 7.6).
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -37,6 +37,12 @@ class BackendClient:
         response.raise_for_status()
         return response.json()["data"]["dataset"]
 
+    def list_training_jobs(self, status: str) -> List[Dict[str, Any]]:
+        url = f"{self._base_url}/api/internal/training-jobs"
+        response = requests.get(url, params={"status": status}, headers=self._headers, timeout=_TIMEOUT_S)
+        response.raise_for_status()
+        return response.json()["data"]["trainingJobs"]
+
     def update_training_job_status(
         self,
         training_job_id: str,
@@ -45,6 +51,7 @@ class BackendClient:
         progress: Optional[int] = None,
         current_iteration: Optional[int] = None,
         current_cycle: Optional[int] = None,
+        recovery_attempts: Optional[int] = None,
     ) -> bool:
         """Nunca lanza excepciones: un Backend caído no debe tumbar al Worker."""
         url = f"{self._base_url}/api/internal/training-jobs/{training_job_id}/status"
@@ -55,6 +62,8 @@ class BackendClient:
             payload["currentIteration"] = current_iteration
         if current_cycle is not None:
             payload["currentCycle"] = current_cycle
+        if recovery_attempts is not None:
+            payload["recoveryAttempts"] = recovery_attempts
 
         try:
             response = requests.patch(url, json=payload, headers=self._headers, timeout=_TIMEOUT_S)

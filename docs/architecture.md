@@ -588,6 +588,45 @@ This resolves Phase 10.3's flagged caveat about exit code `0` not reliably meani
 
 ---
 
+## Automatic Recovery (Phase 10.5)
+
+`som_` is a direct child process of the Worker (`subprocess.Popen`), so a Worker restart — crash, redeploy, `docker compose restart` — kills it too. This phase makes the Worker check for exactly that situation on startup and resume the training natively rather than starting over. Full details — including an important caveat about a `som_` hang discovered while testing — are in [worker/README.md](../worker/README.md#automatic-recovery-phase-105).
+
+```
+Worker startup (before consuming any queue)
+        │
+        ▼
+  GET /internal/training-jobs?status=RUNNING   ← new endpoint
+        │
+        ▼  for each job found
+  Already running? (TrainingExecutionService.is_running — reads a
+  PID lock file written/removed around the som_ process, Phase 10.3's
+  execution service)
+        │ no
+        ▼
+  ConfiguracionRNA.conf + DatosEntrenamiento.csv + statusRNA.dat all present?
+        │ yes                              │ no
+        ▼                                  ▼
+  recoveryAttempts < MAX?          FAILED — "Faltan archivos
+        │ yes            │ no      necesarios para reanudar: ..."
+        ▼                 ▼
+  increment attempts   FAILED — limit reached
+        │
+        ▼
+  training_runner.run_and_monitor()   ← same function a fresh
+                                         TRAIN message calls, Phase 10.3/10.4
+```
+
+The "run + monitor + finalize" logic (Phases 10.3/10.4) moved out of `training_message_handler.py` into `training_runner.py` specifically so recovery could reuse it verbatim — a resumed training and a fresh one are identical from the point the working directory exists.
+
+`TrainingJob.recoveryAttempts` (new, default `0`, migration `20260705000000`) persists specifically because it has to survive the exact event it's protecting against — an in-memory retry counter would reset on every crash, making a "max attempts" limit meaningless.
+
+**Verified end-to-end, twice, against the real stack**: (1) a `TrainingJob` interrupted immediately after creation (killed before `statusRNA.dat` even existed) correctly failed with a clear missing-file message on the next Worker startup; (2) a `TrainingJob` given a realistic hand-edited early checkpoint (`termino_entrenarse: no`, plausible partial `ciclos`/`iteracion`) was correctly detected, verified, and resumed to `COMPLETED` with `recoveryAttempts: 1`.
+
+A third, deliberately adversarial test — editing a **completed** run's checkpoint to claim `termino_entrenarse: no` while leaving `ciclos`/`iteracion` at their already-final values, a self-contradictory state no real interruption produces — caused `som_` to loop printing the same progress line for 3+ minutes with no timeout in place. The Worker's own handling was still correct (clean `FAILED` once killed externally, no crash), but this exposed that **nothing currently bounds how long `som_` can run**, worth a watchdog in a future phase. The same test incidentally confirmed the stdout progress format Phase 9 only had as a string constant: `total: %d | iteracion: %d | por: %f | ciclo: %d`, `total = NUMERO_LIMITE_ITERACIONES × row count`.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -608,6 +647,7 @@ This resolves Phase 10.3's flagged caveat about exit code `0` not reliably meani
 | 10.2  | Worker: consume training queue, prepare training directory + ConfiguracionRNA.conf (no som_ execution yet) | Complete |
 | 10.3  | Worker: run som_ to completion, capture stdout/stderr/exit code, mark COMPLETED/FAILED | Complete |
 | 10.4  | Worker: monitor statusRNA.dat while som_ runs, sync progress to Backend | Complete |
-| 10.5+ | Automatic recovery/resume, upload results to Storage, definitive progress % | Pending |
+| 10.5  | Worker: automatic recovery of interrupted trainings on startup | Complete |
+| 10.6+ | Upload results to Storage, definitive progress %, som_ watchdog/timeout | Pending |
 | 11    | Results visualization                | Pending     |
 | 12    | AWS deployment                       | Pending     |

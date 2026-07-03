@@ -5,6 +5,7 @@ import type { QueueMessage } from '../../queue'
 import { env } from '../../config/env'
 
 type TrainingJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+const TRAINING_JOB_STATUSES: TrainingJobStatus[] = ['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']
 
 type CreateTrainingJobData = {
   name: string
@@ -95,6 +96,7 @@ export const trainingJobService = {
       progress?: number
       currentIteration?: number
       currentCycle?: number
+      recoveryAttempts?: number
     },
   ) {
     const trainingJob = await trainingJobRepository.findById(id)
@@ -108,11 +110,22 @@ export const trainingJobService = {
     if (data.progress !== undefined) updateData.progress = data.progress
     if (data.currentIteration !== undefined) updateData.currentIteration = data.currentIteration
     if (data.currentCycle !== undefined) updateData.currentCycle = data.currentCycle
+    if (data.recoveryAttempts !== undefined) updateData.recoveryAttempts = data.recoveryAttempts
     if (data.status === 'RUNNING' && !trainingJob.startedAt) updateData.startedAt = new Date()
     if (data.status === 'COMPLETED' || data.status === 'FAILED') updateData.finishedAt = new Date()
 
     await trainingJobRepository.update(id, updateData)
 
     return trainingJobRepository.findById(id)
+  },
+
+  // Called by the Worker on startup to find TrainingJobs left in RUNNING
+  // by a Worker restart mid-training, so it can attempt to resume them
+  // (Phase 10.5). Internal/trusted call — no ownership check.
+  async listByStatusInternal(status: string) {
+    if (!TRAINING_JOB_STATUSES.includes(status as TrainingJobStatus)) {
+      throw new Error('INVALID_STATUS')
+    }
+    return trainingJobRepository.findAllByStatus(status as TrainingJobStatus)
   },
 }

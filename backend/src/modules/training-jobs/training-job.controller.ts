@@ -24,6 +24,10 @@ function handleTrainingJobError(err: unknown, res: Response): boolean {
       error(res, 'Training job not found', 404)
       return true
     }
+    if (err.message === 'INVALID_STATUS') {
+      error(res, 'Invalid status query parameter', 400)
+      return true
+    }
   }
   return false
 }
@@ -56,6 +60,15 @@ export const trainingJobController = {
     try {
       const trainingJob = await trainingJobService.reportStatus(req.params.id, req.body)
       success(res, { trainingJob })
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
+  async listInternal(req: Request, res: Response) {
+    try {
+      const trainingJobs = await trainingJobService.listByStatusInternal(req.query.status as string)
+      success(res, { trainingJobs })
     } catch (err) {
       if (!handleTrainingJobError(err, res)) throw err
     }

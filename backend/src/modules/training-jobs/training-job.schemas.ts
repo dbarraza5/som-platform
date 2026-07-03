@@ -20,4 +20,5 @@ export const reportTrainingJobStatusSchema = z.object({
   progress: z.number().int().min(0).max(100).optional(),
   currentIteration: z.number().int().nonnegative().optional(),
   currentCycle: z.number().int().nonnegative().optional(),
+  recoveryAttempts: z.number().int().nonnegative().optional(),
 })

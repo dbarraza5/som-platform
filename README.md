@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 10.4** — While `som_` trains, the Worker periodically reads `statusRNA.dat` (the sole source of truth for training state) and syncs `status`/`progress`/`currentIteration`/`currentCycle` to the Backend. Completion is now determined by `statusRNA.dat`'s `termino_entrenarse` flag, not the process exit code — closing a gap Phase 10.3 had flagged. No real progress-percentage algorithm, automatic recovery, or result upload yet — see [worker/README.md](worker/README.md#training-monitoring-phase-104).
+**Phase 10.5** — If the Worker restarts mid-training (crash, redeploy), it now detects any `TrainingJob` left `RUNNING` on startup, verifies the training directory is intact, and re-invokes `som_` in place — relying on the executable's own native resume support rather than starting over. A configurable retry limit (`MAX_RECOVERY_ATTEMPTS`, default 3) prevents infinite recovery loops. No progress-percentage algorithm, result upload, or `som_` watchdog/timeout yet — see [worker/README.md](worker/README.md#automatic-recovery-phase-105).

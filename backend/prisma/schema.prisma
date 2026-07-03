@@ -83,6 +83,7 @@ model TrainingJob {
   progress                 Int            @default(0)
   currentIteration         Int?
   currentCycle             Int?
+  recoveryAttempts         Int            @default(0)
   gridWidth                Int
   gridHeight               Int
   neuronCount              Int

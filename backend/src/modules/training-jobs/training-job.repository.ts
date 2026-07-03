@@ -16,12 +16,15 @@ type CreateTrainingJobData = {
   threadCount: number
 }
 
+type TrainingJobStatusValue = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
 type UpdateTrainingJobData = {
-  status?: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  status?: TrainingJobStatusValue
   errorMessage?: string | null
   progress?: number
   currentIteration?: number
   currentCycle?: number
+  recoveryAttempts?: number
   startedAt?: Date | null
   finishedAt?: Date | null
 }
@@ -33,6 +36,10 @@ export const trainingJobRepository = {
 
   findById(id: string) {
     return prisma.trainingJob.findUnique({ where: { id } })
+  },
+
+  findAllByStatus(status: TrainingJobStatusValue) {
+    return prisma.trainingJob.findMany({ where: { status } })
   },
 
   update(id: string, data: UpdateTrainingJobData) {
