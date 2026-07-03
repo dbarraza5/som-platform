@@ -19,6 +19,9 @@ type CreateTrainingJobData = {
 type UpdateTrainingJobData = {
   status?: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
   errorMessage?: string | null
+  progress?: number
+  startedAt?: Date | null
+  finishedAt?: Date | null
 }
 
 export const trainingJobRepository = {

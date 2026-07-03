@@ -17,4 +17,5 @@ export const createTrainingJobSchema = z.object({
 export const reportTrainingJobStatusSchema = z.object({
   status: z.enum(['QUEUED', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED']),
   errorMessage: z.string().nullable().optional(),
+  progress: z.number().int().min(0).max(100).optional(),
 })

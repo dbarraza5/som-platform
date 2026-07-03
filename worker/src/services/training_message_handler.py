@@ -1,10 +1,12 @@
 """
 Maneja mensajes de la cola de entrenamiento (operation=TRAIN).
 
-En esta fase el Worker únicamente prepara el entorno de trabajo del
-TrainingJob: descarga el Dataset normalizado, calcula NUMERO_ENTRADAS y
-genera ConfiguracionRNA.conf. NO ejecuta som_ todavía — eso es la
-siguiente fase.
+El Worker prepara el entorno de trabajo del TrainingJob (descarga el
+Dataset normalizado, calcula NUMERO_ENTRADAS, genera ConfiguracionRNA.conf
+— Fase 10.2) y luego ejecuta som_ hasta que finalice (Fase 10.3). Todavía
+NO se reporta progreso intermedio, no hay reanudación automática, y los
+archivos generados no se suben a Storage — eso queda para fases
+posteriores.
 
 El mensaje de la cola solo identifica el TrainingJob (trainingJobId);
 toda la información adicional (parámetros del entrenamiento, datasetId,
@@ -18,6 +20,7 @@ from ..config.settings import settings
 from ..storage.factory import get_storage_provider
 from .backend_client import get_backend_client
 from .training_environment_service import DATASET_FILENAME, TrainingEnvironmentService, count_columns
+from .training_execution_service import TrainingExecutionService
 
 logger = logging.getLogger(__name__)
 
@@ -60,5 +63,39 @@ def handle_training_message(message: dict) -> None:
 
     except Exception as exc:
         error_message = f"Error al preparar el entorno de entrenamiento: {exc}"
+        logger.error("[WORKER] %s", error_message)
+        client.report_training_job_failed(training_job_id, error_message)
+        return
+
+    try:
+        logger.info("[WORKER] Iniciando entrenamiento...")
+        client.update_training_job_status(training_job_id, status="RUNNING", progress=0)
+
+        files_before = set(os.listdir(training_dir))
+
+        logger.info("[WORKER] Ejecutando som_...")
+        execution_service = TrainingExecutionService()
+        logger.info("[WORKER] Proceso iniciado.")
+        result = execution_service.run(training_dir)
+        logger.info("[WORKER] Proceso finalizado.")
+        logger.info("[WORKER] Código de salida: %d", result.exit_code)
+
+        generated_files = sorted(set(os.listdir(training_dir)) - files_before)
+        logger.info("[WORKER] Archivos generados: %s", generated_files or "ninguno")
+
+        if not result.succeeded:
+            error_message = (
+                f"El entrenamiento finalizó con código de salida {result.exit_code}. "
+                f"stderr: {result.stderr.strip() or '(vacío)'} | stdout: {result.stdout.strip() or '(vacío)'}"
+            )
+            logger.error("[WORKER] %s", error_message)
+            client.report_training_job_failed(training_job_id, error_message)
+            return
+
+        logger.info("[WORKER] Entrenamiento finalizado correctamente. trainingJobId=%s", training_job_id)
+        client.update_training_job_status(training_job_id, status="COMPLETED")
+
+    except Exception as exc:
+        error_message = f"Error al ejecutar el entrenamiento: {exc}"
         logger.error("[WORKER] %s", error_message)
         client.report_training_job_failed(training_job_id, error_message)

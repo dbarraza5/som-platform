@@ -506,10 +506,50 @@ TRAIN message { trainingJobId, datasetId }   ← Phase 10.1, minimal by design
 
 Two Backend endpoints were added to support this, both `internalAuth`-protected like the Phase 7.6 normalization callback:
 - `GET /api/internal/training-jobs/:id` and `GET /api/internal/datasets/:id` — read-only lookups the Worker uses to resolve the message into full records.
-- `PATCH /api/internal/training-jobs/:id/status` — how the Worker reports a preparation failure; the Backend remains the only writer of `TrainingJob.status`.
+- `PATCH /api/internal/training-jobs/:id/status` — how the Worker reports status (Phase 10.3 extends this beyond just `FAILED` — see below); the Backend remains the only writer of `TrainingJob.status`.
 
 ### Why the training directory isn't temporary
 `temp/job-<datasetId>/` (normalization, Phase 7.5–7.6) is deleted once its output is durably stored elsewhere. `storage/training/<trainingJobId>/` is the opposite: it **is** the durable location, kept indefinitely, because a future phase's automatic resume needs to find `pesosRNA.csv` / `statusRNA.dat` there after a Worker restart mid-training.
+
+---
+
+## Running the Training (Phase 10.3)
+
+Same `handle_training_message()` call as Phase 10.2, extended: once the training directory is prepared, the Worker now actually runs `som_` inside it and waits for it to finish. Full details — including a real caveat found while testing — are in [worker/README.md](../worker/README.md#running-the-training-phase-103).
+
+```
+Environment prepared (Phase 10.2)
+        │
+        ▼
+  PATCH .../status  { status: RUNNING, progress: 0 }   ← Backend sets startedAt = now()
+        │
+        ▼
+  subprocess.run([som_], cwd=training_dir, capture_output=True, text=True)
+        │
+        ▼
+  Process exits — exit code, stdout, stderr all captured
+        │
+        ▼
+  Diff training_dir's file listing (before vs. after) → log genuinely new files
+        │
+        ▼
+  exit_code == 0 ?
+        │                              │
+       yes                             no
+        │                              │
+        ▼                              ▼
+  PATCH .../status                PATCH .../status
+  { status: COMPLETED }           { status: FAILED, errorMessage }
+  Backend sets finishedAt         Backend sets finishedAt
+```
+
+`reportStatus` (`training-job.service.ts`) now also accepts an optional `progress` and sets `TrainingJob.startedAt`/`finishedAt` based on the status transition (`RUNNING` → `startedAt`, `COMPLETED`/`FAILED` → `finishedAt`) — both fields existed on the Prisma model since the original schema but were unused until now; no migration was needed.
+
+### A real caveat, not a hypothetical one
+Testing this phase found that `som_` exits `0` even on a genuine configuration error (`NUMERO_ENTRADAS` not matching the CSV's actual column count) — the same pattern Phase 9 found for "file not found." The Worker's normal flow can't hit this particular case (it always computes `NUMERO_ENTRADAS` from the real file), but it means **exit code alone doesn't fully distinguish a real training run from an early bail-out** in general. Implemented as literally specified for this phase (exit code drives `COMPLETED`/`FAILED`); flagged in `worker/README.md` for a future phase to strengthen (e.g. also checking that `pesosRNA.csv`/`statusRNA.dat` were actually produced).
+
+### Verified against a real training run
+A 6×6 grid, 3-input-dimension training against the same 5-row dataset used throughout this session's testing completed in ~5 seconds, exit code `0`, and produced exactly the four files Phase 9 predicted from static binary analysis alone: `ConfiguracionRNA.xml`, `pesosRNA.csv`, `statusRNA.dat`, `activacion_rna.csv`. `statusRNA.dat` turned out to be plain text (`termino_entrenarse = si`, `ciclos = 41`, `iteracion = 205`, …), not binary — useful for whichever future phase implements progress/resume.
 
 ---
 
@@ -531,6 +571,7 @@ Two Backend endpoints were added to support this, both `internalAuth`-protected 
 | 9     | Worker: SOM executable integration (preparation only, no training yet) | Complete |
 | 10.1  | TrainingJob creation + training queue (Backend only, Worker doesn't consume yet) | Complete |
 | 10.2  | Worker: consume training queue, prepare training directory + ConfiguracionRNA.conf (no som_ execution yet) | Complete |
-| 10.3+ | Worker: run som_, track progress | Pending |
+| 10.3  | Worker: run som_ to completion, capture stdout/stderr/exit code, mark COMPLETED/FAILED | Complete |
+| 10.4+ | Progress monitoring, automatic resume, upload results to Storage | Pending |
 | 11    | Results visualization                | Pending     |
 | 12    | AWS deployment                       | Pending     |

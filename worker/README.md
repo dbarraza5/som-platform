@@ -243,3 +243,69 @@ Every step above is wrapped in one `try/except` in `handle_training_message()`. 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TRAINING_QUEUE_NAME` | `training_jobs` | Second queue the Worker listens on, alongside `QUEUE_NAME` |
+
+---
+
+## Running the Training (Phase 10.3)
+
+Immediately after environment preparation succeeds (Phase 10.2, same `handle_training_message()` call), the Worker now actually runs `som_` to completion. **Still no progress reporting, no automatic resume, no uploading results to Storage** — those are later phases. On success, nothing except `TrainingJob.status`/`startedAt`/`finishedAt` changes; `progress` is explicitly set to `0` when entering `RUNNING` and is never touched again in this phase.
+
+### How the Worker runs `som_`
+
+`TrainingExecutionService.run(working_dir)` (`training_execution_service.py`) calls:
+
+```python
+subprocess.run([SOM_EXECUTABLE_PATH], cwd=working_dir, capture_output=True, text=True)
+```
+
+- **`cwd=working_dir`** — the process is launched with its working directory set to `storage/training/<trainingJobId>/`, not the Worker's own `/app`. This is what makes `som_` find `ConfiguracionRNA.conf` and `DatosEntrenamiento.csv` using their bare, relative names (Phase 9's finding: the binary always resolves paths relative to whatever directory it's invoked from). `SOM_EXECUTABLE_PATH` itself is resolved to an absolute path (`os.path.abspath("executables/som_")`, computed from the Worker's own cwd, which subprocess's `cwd=` parameter doesn't change) so it's still found correctly regardless of where the child process's cwd points.
+- **`capture_output=True`** — this is `subprocess.run`'s built-in `Popen(...).communicate()` under the hood, which reads stdout and stderr concurrently as the child writes them. Manually wiring up `Popen` with `PIPE` and calling `.wait()` before draining both pipes is a classic deadlock (the child blocks writing to a full pipe buffer while the parent blocks waiting for exit) — `subprocess.run(capture_output=True)` sidesteps that entirely, which is what "la forma más adecuada para ejecutar procesos externos desde Python" means here.
+- **`text=True`** — decodes stdout/stderr as `str` instead of `bytes`, so they can go straight into log messages and the `errorMessage` sent to the Backend.
+- **No timeout.** `subprocess.run()` blocks the Worker's single message loop until `som_` exits — by design, since "esperar a que el proceso finalice" is the explicit requirement this phase, and there's no worker pool or async execution model yet. The Worker won't pick up its next queue message until the current training finishes. No timeout was added since none was requested; a very long or hung `som_` process would currently block the Worker indefinitely. Worth revisiting once multiple concurrent trainings matter.
+
+### Determining success — and an important caveat
+
+The Worker treats `exit_code == 0` as success (→ `COMPLETED`) and anything else as failure (→ `FAILED`, with `stderr`/`stdout` folded into `errorMessage`). This matches what the phase asks for literally, but **testing this phase surfaced a real limitation worth flagging explicitly**: `som_` appears to *always* exit `0`, even when it didn't actually train.
+
+Reproduced directly (bypassing the Worker, running `som_` by hand in a scratch directory) by deliberately setting `NUMERO_ENTRADAS` in `ConfiguracionRNA.conf` to not match the CSV's real column count:
+
+```
+$ ./som_
+El numero de columnas del archivo: 3.
+Error Archivo Configuracion: El numero de columnas del archivo no coincide con el numero entrada.
+$ echo $?
+0
+```
+
+Same as Phase 9's "Fichero no encontrado" finding — the binary prints a Spanish error message to stdout and exits `0` regardless. Because `handle_training_message()` (Phase 10.2) always computes `NUMERO_ENTRADAS` from the real, freshly-downloaded CSV, this specific mismatch can't happen through the normal automated flow — but it demonstrates that **exit code alone cannot be fully trusted** to distinguish a real training run from an early validation bail-out, for *any* class of `som_`-side error, not just this one.
+
+A real, successful training run was verified end-to-end (see below) and does exit `0` — so exit-code-based detection isn't wrong for the happy path, just not sufficient as the *only* signal for every failure mode. A future phase should strengthen this, e.g. by also checking that `pesosRNA.csv` and `statusRNA.dat` were actually produced (or by matching known error substrings — `"Error Archivo Configuracion"`, `"Fichero no encontrado"` — in stdout) before trusting a `0` exit code as a real success. Not addressed in this phase to avoid guessing at a detection strategy that wasn't specified.
+
+### Detecting generated files
+
+Before running `som_`, the Worker snapshots `os.listdir(training_dir)`. After the process exits, it snapshots again and logs the **set difference** — genuinely new files, not a hardcoded filename list (`DatosEntrenamiento.csv` and `ConfiguracionRNA.conf`, already present from Phase 10.2, are correctly excluded this way). A real training run against a 5-row, 3-column dataset produced all four files Phase 9 predicted from reading the binary's symbol table alone, confirming those predictions:
+
+| File | Confirmed content |
+|---|---|
+| `ConfiguracionRNA.xml` | Rewritten as expected (Phase 9); `numero-datos` now correctly shows `5`, matching the real row count read — resolves Phase 9's open question about that field. |
+| `statusRNA.dat` | Plain `key = value` text, not binary despite the `.dat` extension: `termino_entrenarse = si`, `ciclos = 41`, `iteracion = 205`, plus `alfa`/`beta`/`alfas`/`betas`. This is what a future resume/progress phase would parse. |
+| `pesosRNA.csv` | The trained neuron weight matrix — one row per neuron (36 rows for a 6×6 grid), `;`-separated floats, one column per input dimension (3, matching `NUMERO_ENTRADAS`). |
+| `activacion_rna.csv` | Generated, not yet inspected in depth — deferred to whichever future phase actually consumes it. |
+
+None of these are uploaded to Storage in this phase — they simply remain in `storage/training/<trainingJobId>/` alongside `DatosEntrenamiento.csv` and `ConfiguracionRNA.conf` (6 files total after a successful run).
+
+### Error handling
+
+Execution failures are caught in a second `try/except` (separate from Phase 10.2's environment-preparation one, so a failure here is clearly attributable to "training execution" vs. "environment prep" in the logged message) and reported the same way: `client.report_training_job_failed(training_job_id, error_message)`. Covers: the executable missing/not executable (raised explicitly by `TrainingExecutionService.run()` before even calling `subprocess.run`), a non-zero exit code (message includes exit code + stderr + stdout), and any unexpected Python-side exception. The training directory is never cleaned up, success or failure — same reasoning as Phase 10.2.
+
+### Training directory after a successful run
+
+```
+storage/training/<trainingJobId>/
+    DatosEntrenamiento.csv       ← Phase 10.2
+    ConfiguracionRNA.conf        ← Phase 10.2
+    ConfiguracionRNA.xml         ← written by som_ itself
+    pesosRNA.csv                 ← written by som_ itself
+    statusRNA.dat                ← written by som_ itself
+    activacion_rna.csv           ← written by som_ itself
+```

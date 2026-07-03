@@ -9,7 +9,7 @@ compartida que BackendNotifier (Fase 7.6).
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -37,21 +37,29 @@ class BackendClient:
         response.raise_for_status()
         return response.json()["data"]["dataset"]
 
-    def report_training_job_failed(self, training_job_id: str, error_message: str) -> bool:
+    def update_training_job_status(
+        self,
+        training_job_id: str,
+        status: str,
+        error_message: Optional[str] = None,
+        progress: Optional[int] = None,
+    ) -> bool:
         """Nunca lanza excepciones: un Backend caído no debe tumbar al Worker."""
         url = f"{self._base_url}/api/internal/training-jobs/{training_job_id}/status"
+        payload: Dict[str, Any] = {"status": status, "errorMessage": error_message}
+        if progress is not None:
+            payload["progress"] = progress
+
         try:
-            response = requests.patch(
-                url,
-                json={"status": "FAILED", "errorMessage": error_message},
-                headers=self._headers,
-                timeout=_TIMEOUT_S,
-            )
+            response = requests.patch(url, json=payload, headers=self._headers, timeout=_TIMEOUT_S)
             response.raise_for_status()
             return True
         except requests.RequestException as exc:
-            logger.error("[WORKER] Error al notificar fallo del TrainingJob al Backend: %s", exc)
+            logger.error("[WORKER] Error al actualizar el estado del TrainingJob en el Backend: %s", exc)
             return False
+
+    def report_training_job_failed(self, training_job_id: str, error_message: str) -> bool:
+        return self.update_training_job_status(training_job_id, status="FAILED", error_message=error_message)
 
 
 def get_backend_client() -> BackendClient:

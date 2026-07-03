@@ -80,17 +80,26 @@ export const trainingJobService = {
     return trainingJob
   },
 
-  // Called by the Worker to report that environment preparation (or,
-  // in a later phase, the training itself) failed. The Backend remains
-  // the only writer of TrainingJob.status.
-  async reportStatus(id: string, data: { status: TrainingJobStatus; errorMessage?: string | null }) {
+  // Called by the Worker to report environment-preparation or training
+  // progress (RUNNING/COMPLETED/FAILED). The Backend remains the only
+  // writer of TrainingJob.status — the Worker never touches Postgres.
+  async reportStatus(
+    id: string,
+    data: { status: TrainingJobStatus; errorMessage?: string | null; progress?: number },
+  ) {
     const trainingJob = await trainingJobRepository.findById(id)
     if (!trainingJob) throw new Error('TRAINING_JOB_NOT_FOUND')
 
-    await trainingJobRepository.update(id, {
+    const updateData: Parameters<typeof trainingJobRepository.update>[1] = {
       status: data.status,
       errorMessage: data.errorMessage ?? null,
-    })
+    }
+
+    if (data.progress !== undefined) updateData.progress = data.progress
+    if (data.status === 'RUNNING') updateData.startedAt = new Date()
+    if (data.status === 'COMPLETED' || data.status === 'FAILED') updateData.finishedAt = new Date()
+
+    await trainingJobRepository.update(id, updateData)
 
     return trainingJobRepository.findById(id)
   },

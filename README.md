@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 10.2** — The Worker now consumes the `training_jobs` queue: for each `TrainingJob`, it downloads the normalized Dataset, computes `NUMERO_ENTRADAS`, and generates a validated `ConfiguracionRNA.conf` in a permanent per-job directory (`storage/training/<trainingJobId>/`). The `som_` executable itself is still not invoked — see [worker/README.md](worker/README.md#training-environment-preparation-phase-102).
+**Phase 10.3** — The Worker now runs `som_` to completion for each `TrainingJob` (`RUNNING` → `COMPLETED`/`FAILED`), capturing stdout/stderr/exit code and detecting whatever files the executable produced (`pesosRNA.csv`, `statusRNA.dat`, `activacion_rna.csv`, `ConfiguracionRNA.xml` — confirmed by an actual training run). No progress reporting, resume, or result upload yet — see [worker/README.md](worker/README.md#running-the-training-phase-103).
