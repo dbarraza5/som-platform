@@ -553,6 +553,41 @@ A 6×6 grid, 3-input-dimension training against the same 5-row dataset used thro
 
 ---
 
+## Training Monitoring (Phase 10.4)
+
+`statusRNA.dat` becomes the single official source of training state — not `stdout`, not the process exit code. Full details (the `TrainingStatusReader` domain object, the `Popen`+poll rework that made monitoring possible, and an explicit progress-percentage TODO) are in [worker/README.md](../worker/README.md#training-monitoring-phase-104).
+
+```
+som_ running (Popen, not subprocess.run — Phase 10.3 blocked, couldn't poll)
+        │
+        ▼   every TRAINING_STATUS_POLL_INTERVAL_S (default 5s)
+  TrainingStatusReader.read(training_dir)
+        │
+   file missing / unparseable?  ──yes──▶  log "todavía no disponible", retry next tick (not a failure)
+        │ no
+        ▼
+  PATCH .../status { status: RUNNING, progress: 0, currentIteration, currentCycle }
+        │
+        ▼  (repeats until the process exits)
+  Process exits → one final TrainingStatusReader.read()
+        │
+   termino_entrenarse == "si" ?
+        │                              │
+       yes                             no
+        ▼                              ▼
+  COMPLETED, progress: 100        FAILED (exit code + statusRNA.dat +
+                                   stderr/stdout folded into errorMessage,
+                                   for diagnostics only)
+```
+
+This resolves Phase 10.3's flagged caveat about exit code `0` not reliably meaning success: completion is now gated on `som_`'s own `termino_entrenarse` claim in `statusRNA.dat`, which the Phase 9/10.3 "silently exits 0 on a real error" finding can't fool.
+
+`TrainingJob` gained `currentIteration`/`currentCycle` (nullable `Int`, migration `20260704000000`) alongside the existing `progress`. The internal status endpoint accepts both now. Fixed in the same change: `reportStatus` previously reset `startedAt` on every `RUNNING` update, which was harmless when `RUNNING` was set exactly once (Phase 10.3) but wrong now that the Worker resends `status: RUNNING` on every poll tick — it's guarded to only fire on the first transition.
+
+**Verified against a real run**: `statusRNA.dat` for this project's 5-row test dataset ends up written only once, right at the end of the ~5–10 second training — every in-flight poll during a run found nothing yet, and the final post-exit read is what actually synced `COMPLETED`/`progress: 100`/`currentIteration: 205`/`currentCycle: 41`. The wait-and-retry path (no false `FAILED` while the file doesn't exist) and the final-read completion path are both exercised and correct; a longer real-world training is what would show intermediate ticks carrying real data.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -572,6 +607,7 @@ A 6×6 grid, 3-input-dimension training against the same 5-row dataset used thro
 | 10.1  | TrainingJob creation + training queue (Backend only, Worker doesn't consume yet) | Complete |
 | 10.2  | Worker: consume training queue, prepare training directory + ConfiguracionRNA.conf (no som_ execution yet) | Complete |
 | 10.3  | Worker: run som_ to completion, capture stdout/stderr/exit code, mark COMPLETED/FAILED | Complete |
-| 10.4+ | Progress monitoring, automatic resume, upload results to Storage | Pending |
+| 10.4  | Worker: monitor statusRNA.dat while som_ runs, sync progress to Backend | Complete |
+| 10.5+ | Automatic recovery/resume, upload results to Storage, definitive progress % | Pending |
 | 11    | Results visualization                | Pending     |
 | 12    | AWS deployment                       | Pending     |

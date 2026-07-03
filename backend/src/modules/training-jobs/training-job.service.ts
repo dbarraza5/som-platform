@@ -83,9 +83,19 @@ export const trainingJobService = {
   // Called by the Worker to report environment-preparation or training
   // progress (RUNNING/COMPLETED/FAILED). The Backend remains the only
   // writer of TrainingJob.status — the Worker never touches Postgres.
+  //
+  // Since Phase 10.4 the Worker calls this repeatedly while som_ runs (once
+  // per statusRNA.dat poll), always with status=RUNNING — so startedAt must
+  // only be set on the *first* such call, not reset on every sync tick.
   async reportStatus(
     id: string,
-    data: { status: TrainingJobStatus; errorMessage?: string | null; progress?: number },
+    data: {
+      status: TrainingJobStatus
+      errorMessage?: string | null
+      progress?: number
+      currentIteration?: number
+      currentCycle?: number
+    },
   ) {
     const trainingJob = await trainingJobRepository.findById(id)
     if (!trainingJob) throw new Error('TRAINING_JOB_NOT_FOUND')
@@ -96,7 +106,9 @@ export const trainingJobService = {
     }
 
     if (data.progress !== undefined) updateData.progress = data.progress
-    if (data.status === 'RUNNING') updateData.startedAt = new Date()
+    if (data.currentIteration !== undefined) updateData.currentIteration = data.currentIteration
+    if (data.currentCycle !== undefined) updateData.currentCycle = data.currentCycle
+    if (data.status === 'RUNNING' && !trainingJob.startedAt) updateData.startedAt = new Date()
     if (data.status === 'COMPLETED' || data.status === 'FAILED') updateData.finishedAt = new Date()
 
     await trainingJobRepository.update(id, updateData)

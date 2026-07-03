@@ -298,6 +298,8 @@ None of these are uploaded to Storage in this phase — they simply remain in `s
 
 Execution failures are caught in a second `try/except` (separate from Phase 10.2's environment-preparation one, so a failure here is clearly attributable to "training execution" vs. "environment prep" in the logged message) and reported the same way: `client.report_training_job_failed(training_job_id, error_message)`. Covers: the executable missing/not executable (raised explicitly by `TrainingExecutionService.run()` before even calling `subprocess.run`), a non-zero exit code (message includes exit code + stderr + stdout), and any unexpected Python-side exception. The training directory is never cleaned up, success or failure — same reasoning as Phase 10.2.
 
+> **Superseded by Phase 10.4 below**: success/failure is no longer decided by exit code alone — see "Determining completion" in the next section. Exit code, stdout, and stderr are still captured and folded into the failure message for diagnostics, per Phase 10.4's explicit instruction that stdout may be kept for debugging but never used to derive status.
+
 ### Training directory after a successful run
 
 ```
@@ -309,3 +311,95 @@ storage/training/<trainingJobId>/
     statusRNA.dat                ← written by som_ itself
     activacion_rna.csv           ← written by som_ itself
 ```
+
+---
+
+## Training Monitoring (Phase 10.4)
+
+While `som_` runs, the Worker now periodically reads `statusRNA.dat` — **the single official source of training state** — and syncs it to the Backend. `stdout` is captured for diagnostics only (Phase 10.3) and is never used to derive status or progress, per this phase's explicit instruction.
+
+### `TrainingStatusReader`
+
+`training_status_reader.py`. Its only job is turning `statusRNA.dat` into a `TrainingStatus` domain object:
+
+```python
+@dataclass
+class TrainingStatus:
+    termino_entrenarse: bool   # "si" → True, anything else → False
+    ciclos: int
+    iteracion: int
+    raw: Dict[str, str]        # every key=value pair found, for logging/future use
+```
+
+`read(training_dir)` returns `None` — never raises — in three cases, all treated identically by the caller ("no data yet, try again next tick"):
+- the file doesn't exist yet (`som_` hasn't written it),
+- it exists but is missing one of the three required keys,
+- it exists but a line failed to parse as an int (`ValueError`) or a read hit an OS-level error (`OSError`) — this covers reading the file at the exact moment `som_` is mid-write and it's momentarily truncated/malformed, a real race condition since the Worker and `som_` touch the same file concurrently.
+
+### Known `statusRNA.dat` structure
+
+```ini
+termino_entrenarse = si
+ciclos = 41
+iteracion = 205
+alfa = 0.4
+beta = 0.01
+alfas = [-0.01, -0.01, -0.01]
+betas = [0.01, 0.01, 0.01]
+```
+
+Plain `key = value` text (confirmed in Phase 10.3, re-confirmed here), not binary despite the `.dat` extension. Fields actually used: `termino_entrenarse`, `ciclos`, `iteracion` — the phase's explicit minimum. `alfa`/`beta`/`alfas`/`betas` are parsed into `raw` but **deliberately not stored** on `TrainingJob` (already have `alpha`/`beta` from the job's own config; re-deriving them from a training-time snapshot would be redundant and was explicitly excluded by this phase).
+
+One finding worth noting: `iteracion` (205) equals `ciclos` (41) × the training row count (5) in every run observed — consistent with `ciclos` counting full passes over the dataset and `iteracion` counting per-sample updates.
+
+### How execution changed to allow polling
+
+Phase 10.3's `TrainingExecutionService.run()` used `subprocess.run()`, which blocks until the process exits — leaving no window to read `statusRNA.dat` *during* the run. It's now `subprocess.Popen()` plus a poll loop:
+
+```python
+process = subprocess.Popen([self._executable_path], cwd=working_dir, stdout=stdout_f, stderr=stderr_f, text=True)
+while process.poll() is None:
+    if on_tick is not None:
+        on_tick()
+    time.sleep(self._poll_interval_s)
+```
+
+`stdout`/`stderr` are now redirected to `tempfile.TemporaryFile()` handles instead of `PIPE` — real files, opened *outside* `working_dir` so they never show up in the "generated files" diff, and immune to the classic `PIPE`-fills-up-and-both-sides-block deadlock regardless of how much output accumulates over a long run (the original `capture_output=True` risk from Phase 10.3 doesn't apply to a growing pipe over a multi-hour training the same way it does to a short-lived process). `training_message_handler.py` passes an `on_tick` closure that does the actual read-and-sync work — `TrainingExecutionService` itself still has no idea what happens inside the callback, keeping it ignorant of Redis/Queue/Backend, consistent with every other "pure" service in this Worker.
+
+### Sync frequency and payload
+
+Controlled by `TRAINING_STATUS_POLL_INTERVAL_S` (default `5` seconds). Each tick, if `statusRNA.dat` has readable data:
+
+```
+[WORKER] Leyendo statusRNA.dat...
+[WORKER] Iteración: 205
+[WORKER] Ciclo: 41
+[WORKER] Sincronizando estado con Backend...
+```
+
+→ `PATCH /api/internal/training-jobs/:id/status` with `{ status: "RUNNING", progress: 0, currentIteration, currentCycle }`. The endpoint (extended this phase) now also accepts `progress`, `currentIteration`, `currentCycle`. A bug from Phase 10.3 was fixed while extending it: `reportStatus` used to set `startedAt = new Date()` on *every* `RUNNING` update — harmless when `RUNNING` was set once, but wrong now that the Worker resends `status: "RUNNING"` on every poll tick. It's now only set `if (data.status === 'RUNNING' && !trainingJob.startedAt)` — first transition only.
+
+If `statusRNA.dat` isn't available yet, the tick just logs `statusRNA.dat todavía no disponible. Reintentando...` and returns without calling the Backend at all — exactly the "wait a few seconds and retry, don't fail immediately" behavior this phase asks for. Observed in practice: for the small (5-row) dataset used throughout this project's manual testing, the entire ~5–10 second training completes before `statusRNA.dat` is ever written mid-run — every tick during execution finds nothing, and the only real data comes from the *final* read after the process exits. The polling and Backend-sync machinery is exercised and correct either way; a longer, real-world training is what would actually show intermediate values flowing through it.
+
+### TODO: progress percentage (explicitly deferred)
+
+This phase does **not** implement a real progress percentage. `progress` is sent as a fixed `0` on every `RUNNING` tick and only becomes `100` on confirmed completion — a placeholder that satisfies "sync `status`/`progress`/`currentIteration`/`currentCycle` after every read" without fabricating a number that isn't backed by a real calculation. `NUMERO_LIMITE_ITERACIONES` must **not** be used for this (explicit instruction — and Phase 10.3 already found the field's own semantics aren't fully understood: a run with `iterationLimit=50` still produced `iteracion=205`, so it doesn't act as a hard cap the way its name suggests). The definitive algorithm is left for a future phase; `currentIteration`/`currentCycle` are already being synced so that future phase has real numbers to work from.
+
+### Detecting a stalled `statusRNA.dat`
+
+Each tick compares `(ciclos, iteracion)` against the previous successful read. If unchanged for `_STALE_TICKS_WARNING_THRESHOLD` (`3`) consecutive ticks, the Worker logs a `WARNING` — nothing else. Per this phase's explicit scope, no recovery action is taken; automatic recovery is Phase 10.5.
+
+### Determining completion
+
+`statusRNA.dat` is now the sole source of truth for whether training actually finished — not the process's exit code. After `som_` exits, the Worker does one final `TrainingStatusReader.read()`:
+
+- **`termino_entrenarse == True`** → `COMPLETED`, `progress: 100`, `currentIteration`/`currentCycle` set to their final values, monitoring ends.
+- **Anything else** (file missing, or present but `termino_entrenarse` isn't `"si"`) → `FAILED`, with an error message that folds in the exit code, the raw `statusRNA.dat` contents if any, and stderr/stdout for diagnostics.
+
+This directly closes the gap flagged in Phase 10.3: `som_` was found to exit `0` even on a genuine configuration error, which made exit code alone unreliable. `termino_entrenarse` is a much stronger signal — it's the executable's own explicit claim about whether it actually finished, not just whether the OS process happened to return cleanly.
+
+### Worker environment variable
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRAINING_STATUS_POLL_INTERVAL_S` | `5` | Seconds between `statusRNA.dat` reads while `som_` is running |

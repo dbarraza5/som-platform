@@ -43,12 +43,18 @@ class BackendClient:
         status: str,
         error_message: Optional[str] = None,
         progress: Optional[int] = None,
+        current_iteration: Optional[int] = None,
+        current_cycle: Optional[int] = None,
     ) -> bool:
         """Nunca lanza excepciones: un Backend caído no debe tumbar al Worker."""
         url = f"{self._base_url}/api/internal/training-jobs/{training_job_id}/status"
         payload: Dict[str, Any] = {"status": status, "errorMessage": error_message}
         if progress is not None:
             payload["progress"] = progress
+        if current_iteration is not None:
+            payload["currentIteration"] = current_iteration
+        if current_cycle is not None:
+            payload["currentCycle"] = current_cycle
 
         try:
             response = requests.patch(url, json=payload, headers=self._headers, timeout=_TIMEOUT_S)

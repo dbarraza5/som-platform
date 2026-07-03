@@ -12,6 +12,7 @@ class Settings:
     STORAGE_LOCAL_PATH: str = os.environ.get("STORAGE_LOCAL_PATH", "/app/storage")
     BACKEND_URL: str = os.environ.get("BACKEND_URL", "http://backend:3000")
     INTERNAL_API_KEY: str = os.environ.get("INTERNAL_API_KEY", "dev-internal-api-key-change-in-production")
+    TRAINING_STATUS_POLL_INTERVAL_S: float = float(os.environ.get("TRAINING_STATUS_POLL_INTERVAL_S", "5"))
 
 
 settings = Settings()

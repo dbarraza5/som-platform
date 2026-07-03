@@ -81,6 +81,8 @@ model TrainingJob {
   description              String?
   status                   TrainingStatus @default(QUEUED)
   progress                 Int            @default(0)
+  currentIteration         Int?
+  currentCycle             Int?
   gridWidth                Int
   gridHeight               Int
   neuronCount              Int

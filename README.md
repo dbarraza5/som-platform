@@ -67,4 +67,4 @@ The raw OpenAPI spec is also available at `http://localhost:3000/api/openapi.jso
 
 ## Current Phase
 
-**Phase 10.3** — The Worker now runs `som_` to completion for each `TrainingJob` (`RUNNING` → `COMPLETED`/`FAILED`), capturing stdout/stderr/exit code and detecting whatever files the executable produced (`pesosRNA.csv`, `statusRNA.dat`, `activacion_rna.csv`, `ConfiguracionRNA.xml` — confirmed by an actual training run). No progress reporting, resume, or result upload yet — see [worker/README.md](worker/README.md#running-the-training-phase-103).
+**Phase 10.4** — While `som_` trains, the Worker periodically reads `statusRNA.dat` (the sole source of truth for training state) and syncs `status`/`progress`/`currentIteration`/`currentCycle` to the Backend. Completion is now determined by `statusRNA.dat`'s `termino_entrenarse` flag, not the process exit code — closing a gap Phase 10.3 had flagged. No real progress-percentage algorithm, automatic recovery, or result upload yet — see [worker/README.md](worker/README.md#training-monitoring-phase-104).

@@ -20,6 +20,8 @@ type UpdateTrainingJobData = {
   status?: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
   errorMessage?: string | null
   progress?: number
+  currentIteration?: number
+  currentCycle?: number
   startedAt?: Date | null
   finishedAt?: Date | null
 }
