@@ -6,15 +6,22 @@ un TrainingJob recién creado) y la recuperación automática de
 entrenamientos interrumpidos (training_recovery_service, Fase 10.5) —
 ambos terminan haciendo exactamente lo mismo una vez que el directorio de
 trabajo ya existe con ConfiguracionRNA.conf y DatosEntrenamiento.csv.
+
+Al confirmarse termino_entrenarse=si, también publica los resultados
+hacia el storage permanente y limpia el directorio temporal (Fase 10.6):
+el TrainingJob solo pasa a COMPLETED después de una publicación exitosa.
 """
 
 import logging
 import os
+import shutil
 
 from ..config.settings import settings
+from ..storage.factory import get_storage_provider
 from .backend_client import BackendClient
 from .training_execution_service import TrainingExecutionService
-from .training_status_reader import TrainingStatusReader
+from .training_results_publisher import TrainingResultsPublisher
+from .training_status_reader import TrainingStatus, TrainingStatusReader
 
 logger = logging.getLogger(__name__)
 
@@ -100,14 +107,16 @@ def run_and_monitor(client: BackendClient, training_job_id: str, training_dir: s
     final_status = status_reader.read(training_dir)
 
     if final_status is not None and final_status.termino_entrenarse:
-        logger.info("[WORKER] Entrenamiento finalizado. trainingJobId=%s", training_job_id)
-        client.update_training_job_status(
-            training_job_id,
-            status="COMPLETED",
-            progress=100,
-            current_iteration=final_status.iteracion,
-            current_cycle=final_status.ciclos,
-        )
+        logger.info("[WORKER] Entrenamiento finalizado.")
+
+        try:
+            _publish_and_finalize(client, training_job_id, training_dir, generated_files, final_status)
+        except Exception as exc:
+            error_message = f"Error al publicar resultados del entrenamiento: {exc}"
+            logger.error("[WORKER] %s", error_message)
+            client.report_training_job_failed(training_job_id, error_message)
+            return False
+
         return True
 
     error_message = (
@@ -119,3 +128,46 @@ def run_and_monitor(client: BackendClient, training_job_id: str, training_dir: s
     logger.error("[WORKER] %s", error_message)
     client.report_training_job_failed(training_job_id, error_message)
     return False
+
+
+def _publish_and_finalize(
+    client: BackendClient,
+    training_job_id: str,
+    training_dir: str,
+    generated_files: list,
+    final_status: TrainingStatus,
+) -> None:
+    """Publica resultados, marca COMPLETED, y limpia — en ese orden.
+
+    Cualquier excepción se propaga sin capturarse: run_and_monitor la
+    atrapa y reporta FAILED sin borrar nada localmente, para permitir
+    reintentar la publicación más adelante.
+    """
+    logger.info("[WORKER] Publicando resultados.")
+
+    training_job = client.get_training_job(training_job_id)
+    dataset = client.get_dataset(training_job["datasetId"])
+
+    storage = get_storage_provider()
+    publisher = TrainingResultsPublisher(storage)
+    publisher.publish(
+        training_dir=training_dir,
+        project_id=dataset["projectId"],
+        dataset_id=dataset["id"],
+        training_job_id=training_job_id,
+        extra_filenames=generated_files,
+    )
+
+    logger.info("[WORKER] Actualizando TrainingJob.")
+    client.update_training_job_status(
+        training_job_id,
+        status="COMPLETED",
+        progress=100,
+        current_iteration=final_status.iteracion,
+        current_cycle=final_status.ciclos,
+    )
+
+    logger.info("[WORKER] Limpiando directorio temporal.")
+    shutil.rmtree(training_dir)
+
+    logger.info("[WORKER] Entrenamiento finalizado correctamente. trainingJobId=%s", training_job_id)

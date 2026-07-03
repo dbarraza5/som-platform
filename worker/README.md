@@ -491,3 +491,99 @@ Separately, it's not fully possible to distinguish, from black-box testing alone
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MAX_RECOVERY_ATTEMPTS` | `3` | How many times the Worker will try to resume the same TrainingJob across restarts before giving up (`FAILED`) |
+
+---
+
+## Publishing Results & Closing Out (Phase 10.6)
+
+This is the last phase of the training pipeline — `termino_entrenarse = si` in `statusRNA.dat` no longer just means `COMPLETED`. It now triggers publishing every result file to permanent storage and cleaning up the temporary working directory, so the training is genuinely done: nothing left depending on the Worker's local disk, nothing left for a future phase to still worry about closing out.
+
+### Where this plugs in
+
+Entirely inside `training_runner.py`'s completion branch — the same one Phase 10.4 added and Phase 10.5 already reuses for resumed trainings. No new entry point, no special-casing between a fresh run and a recovered one:
+
+```
+statusRNA.dat says termino_entrenarse = si
+        │
+        ▼
+[WORKER] Entrenamiento finalizado.
+        │
+        ▼
+_publish_and_finalize()
+        │
+  [WORKER] Publicando resultados.
+        │
+  storage.upload() each result file, verified with storage.exists()
+        │
+  [WORKER] Actualizando TrainingJob.     ← status=COMPLETED, progress=100,
+        │                                 only reached if every upload verified
+        ▼
+  [WORKER] Limpiando directorio temporal.   ← shutil.rmtree(training_dir)
+        │
+        ▼
+  [WORKER] Entrenamiento finalizado correctamente.
+```
+
+If `_publish_and_finalize()` raises anything — a missing file, a storage error, a verification failure — `run_and_monitor()` catches it, reports `FAILED` with a clear message, and does **not** delete `training_dir`. Since a resumed training goes through the exact same function, this phase requires zero changes to `training_recovery_service.py` — verified by an actual test (below).
+
+### `TrainingResultsPublisher`
+
+New, small, and — like every other service in this Worker — ignorant of Redis/Queue/Backend. `training_results_publisher.py`:
+
+```python
+KNOWN_RESULT_FILENAMES = (
+    "pesosRNA.csv",
+    "statusRNA.dat",
+    "activacion_rna.csv",
+    "ConfiguracionRNA.xml",
+)
+
+class TrainingResultsPublisher:
+    def publish(self, training_dir, project_id, dataset_id, training_job_id, extra_filenames=()):
+        filenames = sorted(set(KNOWN_RESULT_FILENAMES) | set(extra_filenames))
+        for filename in filenames:
+            ...  # upload + verify, or raise
+```
+
+For each filename it: confirms the file exists locally (raises immediately naming the missing file if not), uploads it via the same `IStorageProvider.upload()` used since Phase 7.4/7.6, then confirms with `storage.exists()` that the upload actually landed — never assumes success just because `upload()` didn't raise.
+
+### Why the filename list is a union, not just a diff
+
+`run_and_monitor()` already computes `generated_files` (the before/after `os.listdir()` diff used for logging since Phase 10.3) and passes it in as `extra_filenames`. This matters for a subtle but real reason discovered while testing: **on a resumed training, the four result files already existed before this particular `run_and_monitor()` call started** (they were written by the interrupted first attempt) — so the before/after diff for *this* run may only catch a subset of them (whichever ones `som_` happened to rewrite this time), missing the others entirely. `KNOWN_RESULT_FILENAMES` is the fixed safety net that guarantees all four are always attempted regardless of whether this specific run's diff noticed them; `extra_filenames` is what lets a future `som_` version's new output file get published automatically without a code change, exactly as the phase requires ("el diseño deberá permitir agregarlos fácilmente").
+
+Confirmed directly: a recovery test's "Archivos generados" log showed only `['activacion_rna.csv', 'pesosRNA.csv']` (the other two already existed from the interrupted attempt), yet the very next log lines show all four — `ConfiguracionRNA.xml`, `activacion_rna.csv`, `pesosRNA.csv`, `statusRNA.dat` — being uploaded.
+
+### Where results land
+
+```
+projects/<projectId>/datasets/<datasetId>/training-jobs/<trainingJobId>/<filename>
+```
+
+Filenames are never renamed. The `training-jobs/<trainingJobId>/` segment is necessary, not incidental: a Dataset has many TrainingJobs (per the domain model in the root `CLAUDE.md`), and every training produces files with the *same* four names — without a per-job subfolder, a second training against the same Dataset would silently overwrite the first one's results. This sits alongside the Dataset's own files (`original.csv`, `normalized.csv`, `dimensions.xml` — Phases 6–7.6), never touching them; confirmed by listing the Dataset's storage folder after a full run and seeing both untouched.
+
+### Error handling: no partial success, nothing deleted
+
+`TrainingResultsPublisher.publish()` raises on the *first* problem it hits — a missing local file or a failed upload — so the Worker never marks `COMPLETED` after only some files made it. Whatever was already uploaded before the failure stays in permanent storage (harmless: a retry re-uploads and overwrites, `upload()` isn't additive), and `training_dir` is left completely intact for a later retry attempt, per the phase's explicit requirement not to delete local files on a publish failure. There is no automatic retry-on-startup for a publish failure (unlike Phase 10.5's recovery of `RUNNING` jobs) — that's a `FAILED` TrainingJob with a clear `errorMessage`, and retrying it is a manual/future-phase action, not implemented here.
+
+### Cleanup
+
+`shutil.rmtree(training_dir)` only runs *after* every file is uploaded and verified *and* the Backend confirms `COMPLETED` — never before, never on any failure path. This is the **only** thing this phase deletes: no Dataset file, no `TrainingJob` row, nothing else in the Backend is touched or removed.
+
+### Verified end-to-end, twice
+
+1. **Fresh completion.** Created a `TrainingJob`, let it run normally. Logs showed the exact sequence the phase specifies (`Entrenamiento finalizado.` → `Publicando resultados.` → `Subiendo: <each file>` → `Actualizando TrainingJob.` → `Limpiando directorio temporal.` → `Entrenamiento finalizado correctamente.`). Confirmed after: `storage/training/<id>/` gone, all four files present under `storage/projects/.../datasets/.../training-jobs/<id>/`, and the Dataset's own `original.csv`/`normalized.csv`/`dimensions.xml` untouched.
+2. **Recovered completion.** Interrupted a training via `docker compose kill`, hand-crafted an early `statusRNA.dat` checkpoint (no `pesosRNA.csv` this time, to avoid Phase 10.5's discovered hang risk from a malformed one), and restarted the Worker. Recovery resumed it (`recoveryAttempts: 1`), it converged normally, and — with zero code changes needed for this path — published all four files and cleaned up exactly like a fresh run. This is what confirmed the union-vs-diff filename behavior described above.
+
+A standalone failure test (missing `ConfiguracionRNA.xml` in an otherwise-real directory) confirmed `TrainingResultsPublisher.publish()` raises immediately naming the missing file, and nothing gets left behind in a half-published state.
+
+### Responsibilities, end to end
+
+| | Worker | StorageProvider |
+|---|---|---|
+| Detect completion | Reads `statusRNA.dat`, checks `termino_entrenarse` | — |
+| Publish | Decides *what* to publish and *when* (only after real completion) | Decides *how* — local disk today, S3 later, without the Worker's training code changing |
+| Verify | Trusts `storage.exists()` after each upload, not just the absence of an exception | Reports existence truthfully for whatever backing store it wraps |
+| Update Backend | Only after every file is verified published | — |
+| Clean up | Deletes only its own temp directory, only after Backend confirms `COMPLETED` | Owns the permanent copies forever after; the Worker never touches them again |
+
+This closes the training pipeline started in Phase 10.1: a `TrainingJob` now goes from creation through queuing, environment prep, execution, monitoring, automatic recovery, and finally durable publication — with nothing left in a temporary or ambiguous state at the end.

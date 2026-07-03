@@ -627,6 +627,37 @@ A third, deliberately adversarial test — editing a **completed** run's checkpo
 
 ---
 
+## Publishing Results & Pipeline Close-out (Phase 10.6)
+
+The last phase of the training pipeline. `termino_entrenarse = si` now means more than `COMPLETED` — it triggers publishing every result file to permanent storage first, and only then updating the Backend and deleting the temp directory. Full details, including why the "what to publish" list is a union rather than a plain diff, are in [worker/README.md](../worker/README.md#publishing-results--closing-out-phase-106).
+
+```
+statusRNA.dat: termino_entrenarse = si
+        │
+        ▼
+  TrainingResultsPublisher.publish()
+    for each of {pesosRNA.csv, statusRNA.dat, activacion_rna.csv,
+                 ConfiguracionRNA.xml} ∪ this-run's "generated files":
+        storage.upload(key, local_path)
+        storage.exists(key)  ← verify, never assume
+        │  any failure → raise (nothing marked COMPLETED, training_dir kept)
+        ▼
+  PATCH .../status  { status: COMPLETED, progress: 100 }
+        │
+        ▼
+  shutil.rmtree(training_dir)   ← only now, only on this exact path
+```
+
+Results land at `projects/<projectId>/datasets/<datasetId>/training-jobs/<trainingJobId>/<filename>` — the same `IStorageProvider` (Phase 7.4/7.6) the rest of the system already uses, with an added `training-jobs/<id>/` segment. That segment is required, not decorative: a Dataset has many TrainingJobs, and every training produces files with the same four names, so without a per-job folder a second training would silently overwrite the first's results.
+
+**Why a union, not just the before/after diff already used for logging (Phase 10.3):** a *resumed* training's four result files already exist before that particular `run_and_monitor()` call starts (left over from the interrupted attempt), so that run's own diff may only catch whichever ones `som_` happened to rewrite — missing the rest entirely. A fixed list of the four known filenames is unioned with the diff so all of them are always attempted, while the diff half still lets a future `som_` version's new output file get published without a code change.
+
+**Verified end-to-end, twice**: a fresh completion published all four files and cleaned up exactly per the logged sequence, with the Dataset's own `original.csv`/`normalized.csv`/`dimensions.xml` left untouched alongside the new `training-jobs/` folder. A *recovered* completion (interrupted, hand-edited checkpoint, resumed per Phase 10.5) needed zero code changes to also publish and clean up correctly — and its "Archivos generados" log line showed only 2 of the 4 files (the diff missing the pair that predated this run), while all 4 were still uploaded, empirically confirming the union behavior above. A separate standalone test confirmed `TrainingResultsPublisher` raises immediately when a required file is missing, without partially publishing.
+
+This closes the pipeline Phase 10.1 started: a `TrainingJob` now goes from creation through queuing, environment prep, execution, monitoring, automatic recovery, and durable publication, with nothing left temporary or ambiguous at the end.
+
+---
+
 ## Phase Status
 
 | Phase | Goal                                 | Status      |
@@ -648,6 +679,6 @@ A third, deliberately adversarial test — editing a **completed** run's checkpo
 | 10.3  | Worker: run som_ to completion, capture stdout/stderr/exit code, mark COMPLETED/FAILED | Complete |
 | 10.4  | Worker: monitor statusRNA.dat while som_ runs, sync progress to Backend | Complete |
 | 10.5  | Worker: automatic recovery of interrupted trainings on startup | Complete |
-| 10.6+ | Upload results to Storage, definitive progress %, som_ watchdog/timeout | Pending |
-| 11    | Results visualization                | Pending     |
+| 10.6  | Worker: publish training results via StorageProvider + clean up temp dir | Complete |
+| 11    | Results visualization/classification (definitive progress %, som_ watchdog/timeout are known follow-ups) | Pending |
 | 12    | AWS deployment                       | Pending     |
