@@ -32,6 +32,24 @@ logger = logging.getLogger(__name__)
 _STALE_TICKS_WARNING_THRESHOLD = 3
 
 
+def _total_cycles(alpha: float, beta: float) -> float | None:
+    """Ciclos totales esperados para este TrainingJob.
+
+    alfa es la tasa de aprendizaje inicial y beta ("Omega" en el Frontend)
+    la tasa final a la que decae; alfa / beta da el número de ciclos
+    esperado. None si beta es 0 (progreso no calculable, se reporta 0).
+    """
+    if not beta:
+        return None
+    return alpha / beta
+
+
+def _progress_from_cycles(current_cycle: int, total_cycles: float | None) -> int:
+    if not total_cycles or total_cycles <= 0:
+        return 0
+    return int(min(100, round((current_cycle / total_cycles) * 100)))
+
+
 def run_and_monitor(client: BackendClient, training_job_id: str, training_dir: str) -> bool:
     """Ejecuta som_, sincroniza progreso, y reporta el resultado final al Backend.
 
@@ -39,6 +57,8 @@ def run_and_monitor(client: BackendClient, training_job_id: str, training_dir: s
     en cualquier otro caso (ya reportado como FAILED al Backend).
     """
     logger.info("[WORKER] Iniciando entrenamiento...")
+    training_job = client.get_training_job(training_job_id)
+    total_cycles = _total_cycles(training_job["alpha"], training_job["beta"])
     client.update_training_job_status(training_job_id, status="RUNNING", progress=0)
     logger.info("[WORKER] Entrenamiento iniciado.")
 
@@ -82,11 +102,7 @@ def run_and_monitor(client: BackendClient, training_job_id: str, training_dir: s
         client.update_training_job_status(
             training_job_id,
             status="RUNNING",
-            # TODO(fase futura): reemplazar por el cálculo definitivo del
-            # porcentaje de avance. NUMERO_LIMITE_ITERACIONES no debe
-            # usarse para este cálculo (Fase 10.4). currentIteration/
-            # currentCycle ya reflejan avance real y son suficientes por ahora.
-            progress=0,
+            progress=_progress_from_cycles(status.ciclos, total_cycles),
             current_iteration=status.iteracion,
             current_cycle=status.ciclos,
         )
