@@ -9,6 +9,7 @@ export interface TrainingJob {
   progress: number
   currentIteration: number | null
   currentCycle: number | null
+  recoveryAttempts: number
   gridWidth: number
   gridHeight: number
   neuronCount: number

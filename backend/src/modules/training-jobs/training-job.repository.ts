@@ -38,6 +38,13 @@ export const trainingJobRepository = {
     return prisma.trainingJob.findUnique({ where: { id } })
   },
 
+  findLatestByDatasetId(datasetId: string) {
+    return prisma.trainingJob.findFirst({
+      where: { datasetId },
+      orderBy: { createdAt: 'desc' },
+    })
+  },
+
   findAllByStatus(status: TrainingJobStatusValue) {
     return prisma.trainingJob.findMany({ where: { status } })
   },

@@ -11,6 +11,7 @@ import { createTrainingJobSchema, reportTrainingJobStatusSchema } from './traini
 export const trainingJobRouter = Router({ mergeParams: true })
 trainingJobRouter.use(authenticate)
 trainingJobRouter.post('/', validate(createTrainingJobSchema), asyncHandler(trainingJobController.create))
+trainingJobRouter.get('/latest', asyncHandler(trainingJobController.getLatest))
 
 // Mounted at /api/internal/training-jobs — Worker-to-backend only, authenticated
 // via a shared API key (internalAuth), never a user JWT.

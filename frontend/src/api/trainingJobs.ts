@@ -12,4 +12,9 @@ export const trainingJobsApi = {
       `/projects/${projectId}/datasets/${datasetId}/training-jobs`,
       body,
     ),
+
+  getLatest: (projectId: string, datasetId: string) =>
+    api.get<ApiResponse<{ trainingJob: TrainingJob | null }>>(
+      `/projects/${projectId}/datasets/${datasetId}/training-jobs/latest`,
+    ),
 }

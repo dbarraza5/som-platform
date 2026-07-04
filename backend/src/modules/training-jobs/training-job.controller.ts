@@ -47,6 +47,19 @@ export const trainingJobController = {
     }
   },
 
+  async getLatest(req: Request, res: Response) {
+    try {
+      const trainingJob = await trainingJobService.getLatestForDataset(
+        req.params.projectId,
+        req.params.datasetId,
+        req.user!.id,
+      )
+      success(res, { trainingJob })
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
   async getByIdInternal(req: Request, res: Response) {
     try {
       const trainingJob = await trainingJobService.getByIdInternal(req.params.id)

@@ -73,6 +73,16 @@ export const trainingJobService = {
     return trainingJobRepository.findById(trainingJob.id)
   },
 
+  // Called by the Frontend (user JWT) to drive the Phase 10.7.2 monitoring
+  // card. Only the most recent TrainingJob is exposed — no history/listing
+  // endpoint exists yet, matching this phase's scope.
+  async getLatestForDataset(projectId: string, datasetId: string, userId: string) {
+    const dataset = await datasetRepository.findById(datasetId)
+    if (!dataset || dataset.projectId !== projectId) throw new Error('DATASET_NOT_FOUND')
+    if (dataset.project.userId !== userId) throw new Error('FORBIDDEN')
+    return trainingJobRepository.findLatestByDatasetId(datasetId)
+  },
+
   // Called by the Worker (internalAuth, not a user JWT) to look up a
   // TrainingJob it only knows the id of.
   async getByIdInternal(id: string) {

@@ -76,3 +76,37 @@ Clicking "Crear entrenamiento" on a Dataset whose pipeline status is `COMPLETED`
 
 - The trigger button and every field in the form are disabled unless `getDatasetPipelineStatus(dataset) === 'COMPLETED'` — checked both on the card (as before) and again inside the form itself, in case the Dataset's status changes while the modal is open.
 - Alpha and Omega are validated with Zod (`> 0`) via `react-hook-form` + `zodResolver`, matching every other form in this codebase.
+
+## Monitoring a training job (Phase 10.7.2)
+
+Once a Dataset has a `TrainingJob` at all — in any status — `DatasetDetailPage` renders `TrainingJobMonitorCard` (`src/pages/projects/datasets/components/TrainingJobMonitorCard.tsx`) in place of `DatasetTrainingCard`. Only the most recent `TrainingJob` for the Dataset is tracked; there is still no history list or comparison between runs (that remains a later phase, as does model visualization and result downloads).
+
+This required one minimal, explicitly-scoped Backend addition: `GET /projects/:projectId/datasets/:datasetId/training-jobs/latest` (JWT-authenticated, same ownership check as dataset access). Every other endpoint under `/training-jobs` was already internal-only (Worker-to-Backend), so the Frontend had no way to read a `TrainingJob`'s current state at all before this — the route only exposes data the Backend already stores, it changes no existing behavior.
+
+### Possible training statuses
+
+The Backend only has five real statuses (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`). `getTrainingDisplayStatus()` (`src/lib/trainingJobStatus.ts`) derives two additional UI-only distinctions from fields already on `TrainingJob`, so the card can be more specific than the raw enum without inventing new Backend states:
+
+| Displayed as | Derived from |
+|---|---|
+| **En cola** | `status === 'QUEUED'` — the Worker hasn't picked up the job yet. |
+| **Iniciando** | `status === 'RUNNING'` but `currentIteration`/`currentCycle` are still `null` — the Worker launched `som_` but hasn't completed its first `statusRNA.dat` poll yet (the same gap Phase 10.3 vs. 10.4 introduced). |
+| **Recuperando entrenamiento...** | `status === 'RUNNING'` and `recoveryAttempts > 0` — the Worker resumed this run after a restart (Phase 10.5). Since there is no separate "recovery in progress right now" signal, this label is shown for the rest of the run, not just a brief instant — a known simplification. |
+| **Entrenando** | `status === 'RUNNING'` with iteration/cycle data and no recovery attempts. |
+| **Entrenamiento completado** | `status === 'COMPLETED'`. |
+| **Entrenamiento fallido** | `status === 'FAILED'`. Shows the Backend's `errorMessage` when present, and a "Crear nuevo entrenamiento" button to start over. |
+| **Entrenamiento cancelado** | `status === 'CANCELLED'` — handled defensively; nothing in the current system creates this status yet. |
+
+### Automatic polling
+
+`DatasetDetailPage` runs a second `useQuery` (`['trainingJob', 'latest', datasetId]`) alongside the existing Dataset query, with the same `refetchInterval` pattern: `isTrainingDisplayStatusActive(status)` returns `false` for `COMPLETED`/`FAILED`/`CANCELLED`, so polling (every 5s, the same `POLL_INTERVAL_MS` used for Dataset polling) stops automatically the moment the job reaches a terminal state — no interval keeps running for a finished job, and no manual refresh is ever required while one is active. Creating a job invalidates this query immediately, so the monitor card replaces the "Crear entrenamiento" button as soon as the request succeeds, without waiting for the next poll tick. Leaving and returning to the page re-fetches on mount, so the card always reflects the Backend's current state rather than stale client state.
+
+### Progress bar and elapsed time
+
+The progress bar (`src/components/ui/progress.tsx`, a plain styled `<div>` rather than a new Radix dependency — same reasoning as `ui/select.tsx`) always renders the Backend's own `progress` percentage; the Frontend never computes it. It — along with "Iteración actual" / "Ciclo actual" — is hidden once the status is terminal (`COMPLETED`/`FAILED`/`CANCELLED`), per the design brief. "Iteración actual" and "Ciclo actual" show "No disponible" instead of blank/`null` whenever the Worker hasn't reported them yet.
+
+"Tiempo transcurrido" (while active) and "Duración total" (once finished) are both computed client-side from the Backend's own `startedAt`/`finishedAt` timestamps (`formatDuration` in `trainingJobStatus.ts`) — this is just formatting a difference between two Backend-supplied dates, not deriving progress. Before `startedAt` exists (`QUEUED`), this shows "No disponible" instead of a misleading `0s`.
+
+### Completion and failure
+
+On `COMPLETED`, the card hides the progress bar, shows "Entrenamiento completado" plus a green confirmation line with the finish date — nothing about the trained model itself (no weights, no visualization) is shown yet, per this phase's scope. On `FAILED`, the card shows "Entrenamiento fallido", the Backend's `errorMessage` if one was reported, and a "Crear nuevo entrenamiento" button that reopens the same configuration modal from Phase 10.7.1 (there is deliberately no such button after `COMPLETED` — the phase brief only calls for allowing a retry after a failure).

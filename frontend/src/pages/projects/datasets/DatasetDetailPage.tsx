@@ -5,7 +5,6 @@ import { Cpu } from 'lucide-react'
 import { datasetsApi } from '@/api/datasets'
 import { trainingJobsApi } from '@/api/trainingJobs'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
   DialogContent,
@@ -19,13 +18,16 @@ import DatasetStatusCard from './components/DatasetStatusCard'
 import DatasetPipeline from './components/DatasetPipeline'
 import DatasetInfoCard from './components/DatasetInfoCard'
 import DatasetTrainingCard from './components/DatasetTrainingCard'
+import TrainingJobMonitorCard from './components/TrainingJobMonitorCard'
 import DatasetDetailSkeleton from './components/DatasetDetailSkeleton'
 import CreateTrainingJobForm, {
   type CreateTrainingJobFormValues,
 } from '@/components/training-jobs/CreateTrainingJobForm'
 import { getDatasetPipelineStatus, isDatasetPipelineActive } from '@/lib/datasetStatus'
 import { getTopologyOption, DEFAULT_NEIGHBORHOOD_RADIUS, DEFAULT_OBJECTIVE_DIMENSION_WEIGHT } from '@/lib/somDefaults'
+import { getTrainingDisplayStatus, isTrainingDisplayStatusActive } from '@/lib/trainingJobStatus'
 import type { Dataset } from '@/types/dataset'
+import type { TrainingJob } from '@/types/trainingJob'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -35,7 +37,6 @@ export default function DatasetDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [showTrainingModal, setShowTrainingModal] = useState(false)
-  const [trainingCreatedMessage, setTrainingCreatedMessage] = useState<string | null>(null)
 
   const { data: dataset, isLoading } = useQuery({
     queryKey: ['dataset', datasetId],
@@ -45,6 +46,18 @@ export default function DatasetDetailPage() {
       const current = query.state.data as Dataset | undefined
       if (!current) return false
       return isDatasetPipelineActive(getDatasetPipelineStatus(current)) ? POLL_INTERVAL_MS : false
+    },
+  })
+
+  const { data: latestTrainingJob } = useQuery({
+    queryKey: ['trainingJob', 'latest', datasetId],
+    queryFn: () =>
+      trainingJobsApi.getLatest(projectId!, datasetId!).then((r) => r.data.data.trainingJob),
+    enabled: !!projectId && !!datasetId,
+    refetchInterval: (query) => {
+      const current = query.state.data as TrainingJob | null | undefined
+      if (!current) return false
+      return isTrainingDisplayStatusActive(getTrainingDisplayStatus(current)) ? POLL_INTERVAL_MS : false
     },
   })
 
@@ -73,7 +86,7 @@ export default function DatasetDetailPage() {
     },
     onSuccess: () => {
       setShowTrainingModal(false)
-      setTrainingCreatedMessage('Entrenamiento creado correctamente. Quedó encolado para su procesamiento.')
+      queryClient.invalidateQueries({ queryKey: ['trainingJob', 'latest', datasetId] })
     },
   })
 
@@ -86,7 +99,6 @@ export default function DatasetDetailPage() {
   }
 
   function handleCreateTraining() {
-    setTrainingCreatedMessage(null)
     setShowTrainingModal(true)
   }
 
@@ -140,23 +152,11 @@ export default function DatasetDetailPage() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <DatasetInfoCard dataset={dataset} />
-          <div className="space-y-3">
-            {trainingCreatedMessage && (
-              <Alert>
-                <AlertDescription className="flex items-center justify-between gap-2">
-                  {trainingCreatedMessage}
-                  <button
-                    type="button"
-                    onClick={() => setTrainingCreatedMessage(null)}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    Cerrar
-                  </button>
-                </AlertDescription>
-              </Alert>
-            )}
+          {latestTrainingJob ? (
+            <TrainingJobMonitorCard trainingJob={latestTrainingJob} onCreateNew={handleCreateTraining} />
+          ) : (
             <DatasetTrainingCard dataset={dataset} onCreateTraining={handleCreateTraining} />
-          </div>
+          )}
         </div>
       </div>
 
