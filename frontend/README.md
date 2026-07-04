@@ -6,7 +6,7 @@ React + Vite + TypeScript, styled with Tailwind CSS and hand-written shadcn/ui c
 
 Route: `/projects/:id/datasets/:datasetId` — `src/pages/projects/datasets/DatasetDetailPage.tsx`.
 
-This is the main panel for a single Dataset: it shows what's happening to the CSV the user uploaded, from upload through normalization, and is where "Crear entrenamiento" will eventually launch a SOM training job (Phase 8 only prepares the UI for that; the flow itself isn't implemented yet).
+This is the main panel for a single Dataset: it shows what's happening to the CSV the user uploaded, from upload through normalization, and is where "Crear entrenamiento" opens the SOM training configuration modal (see [Creating a training job](#creating-a-training-job) below).
 
 ### Component organization
 
@@ -18,7 +18,7 @@ This is the main panel for a single Dataset: it shows what's happening to the CS
 | `DatasetStatusCard` | The primary status card: badge, icon, friendly description, error message. Also hosts the CSV upload control when no file has been uploaded yet. |
 | `DatasetPipeline` | The 4-step stepper (CSV recibido → Trabajo encolado → Normalización → Entrenamiento). |
 | `DatasetInfoCard` | Structured dataset facts (filename, size, status, upload date, normalization finish date, error) with friendly placeholders for anything not yet available. |
-| `DatasetTrainingCard` | "No existen entrenamientos" placeholder + the "Crear entrenamiento" button, enabled only once normalization is `COMPLETED`. |
+| `DatasetTrainingCard` | "No existen entrenamientos" placeholder + the "Crear entrenamiento" button, enabled only once normalization is `COMPLETED`. Clicking it opens the training configuration modal. |
 | `DatasetDetailSkeleton` | Loading placeholder shaped like the real layout (shadcn `Skeleton`), shown instead of a blank page while the dataset query is in flight. |
 
 Shared logic lives in `src/lib/datasetStatus.ts`, not inside any component — every card reads from the same source of truth.
@@ -46,3 +46,33 @@ While the derived status is `UPLOADED`, `QUEUED`, or `PROCESSING`, `DatasetDetai
 - **Status colors follow the existing convention**, not new design tokens: blue/amber/green/red Tailwind classes, the same pattern already used by `DatasetListItem` on the project page. No new CSS variables were introduced.
 - **Cards over tables.** Per the design brief, all dataset facts are laid out as label/value pairs inside Cards rather than an HTML table, consistent with the rest of the app (Dashboard, Project detail).
 - **Placeholders instead of blanks.** Any field that isn't available yet (file size before upload, normalization finish date before completion) renders an italic, muted placeholder string rather than an empty cell.
+
+## Creating a training job
+
+Clicking "Crear entrenamiento" on a Dataset whose pipeline status is `COMPLETED` opens a modal (`DatasetDetailPage.tsx`) containing `CreateTrainingJobForm` (`src/components/training-jobs/CreateTrainingJobForm.tsx`). This phase (10.7.1) only covers *configuring and creating* a `TrainingJob` — no progress bar, live status, history list, recovery UI, or model visualization exists yet (the Dataset detail page still shows a static "No existen entrenamientos" card afterwards; only a transient success banner confirms the creation).
+
+### What the form shows
+
+- **Dataset summary** — name, "Entradas" (`dataset.columns`, the column count computed by the CSV analyzer before normalization — used as the best available proxy for the SOM's input dimension, since the platform doesn't yet expose a post-normalization recount to the frontend) and the same status badge used elsewhere (`DATASET_STATUS_META`).
+- **Topología** — a `<select>` (`src/components/ui/select.tsx`, a native element styled like `Input` rather than a new Radix dependency) restricted to the recommended square grid sizes in `src/lib/somDefaults.ts`: 20×20, 30×30, 40×40 (default), 50×50, 60×60, 80×80. Width/height are never freely typed.
+- **Neuronas** — read-only, computed as `width × height` and recalculated live whenever the topology changes.
+- **Alpha / Omega** — the only two editable SOM parameters, defaulted to `0.5` / `0.005` (the `som_` executable's own built-in defaults, confirmed during Phase 9's static analysis). Both must be greater than 0.
+- **Resumen** — a pre-confirmation recap of Dataset, Topología, Neuronas, Entradas, Alpha and Omega.
+
+### What gets sent to the Backend
+
+`DatasetDetailPage` maps the form values to the existing `POST /projects/:projectId/datasets/:datasetId/training-jobs` contract (`src/api/trainingJobs.ts`) — no Backend change was made for this phase:
+
+| Backend field | Source |
+|---|---|
+| `name` | Auto-generated on the frontend (`Entrenamiento <dataset.name> — <fecha/hora>`) — the form has no name input. |
+| `gridWidth`, `gridHeight` | From the selected topology. |
+| `alpha` | The form's Alpha field. |
+| `beta` | The form's "Omega" field (the Backend/`som_` name for this parameter is `beta`; the UI uses "Omega" per the design brief). |
+| `neighborhoodRadius`, `objectiveDimensionWeight` | Fixed at `som_`'s own defaults (`4` and `0`, `src/lib/somDefaults.ts`) — not exposed in this phase's form. |
+| `description`, `iterationLimit`, `useLogarithmicForget`, `threadCount` | Omitted, so the Backend's own defaults apply. |
+
+### Validation
+
+- The trigger button and every field in the form are disabled unless `getDatasetPipelineStatus(dataset) === 'COMPLETED'` — checked both on the card (as before) and again inside the form itself, in case the Dataset's status changes while the modal is open.
+- Alpha and Omega are validated with Zod (`> 0`) via `react-hook-form` + `zodResolver`, matching every other form in this codebase.
