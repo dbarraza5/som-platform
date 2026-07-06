@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -13,10 +14,12 @@ import type { TrainingJob } from '@/types/trainingJob'
 
 interface TrainingJobMonitorCardProps {
   trainingJob: TrainingJob
+  projectId: string
+  datasetId: string
   onCreateNew: () => void
 }
 
-export default function TrainingJobMonitorCard({ trainingJob, onCreateNew }: TrainingJobMonitorCardProps) {
+export default function TrainingJobMonitorCard({ trainingJob, projectId, datasetId, onCreateNew }: TrainingJobMonitorCardProps) {
   const displayStatus = getTrainingDisplayStatus(trainingJob)
   const meta = TRAINING_STATUS_META[displayStatus]
   const Icon = meta.icon
@@ -78,9 +81,14 @@ export default function TrainingJobMonitorCard({ trainingJob, onCreateNew }: Tra
             <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
               El entrenamiento terminó correctamente el {formatDateTime(trainingJob.finishedAt)}.
             </p>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onCreateNew}>
                 Crear nuevo entrenamiento
+              </Button>
+              <Button asChild>
+                <Link to={`/projects/${projectId}/datasets/${datasetId}/trainings/${trainingJob.id}`}>
+                  Ver resultados
+                </Link>
               </Button>
             </div>
           </>

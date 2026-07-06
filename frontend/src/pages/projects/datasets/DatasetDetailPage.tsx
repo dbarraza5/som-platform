@@ -181,6 +181,8 @@ export default function DatasetDetailPage() {
           {latestTrainingJob ? (
             <TrainingJobMonitorCard
               trainingJob={latestTrainingJob}
+              projectId={projectId!}
+              datasetId={datasetId!}
               onCreateNew={handleCreateTraining}
             />
           ) : (
