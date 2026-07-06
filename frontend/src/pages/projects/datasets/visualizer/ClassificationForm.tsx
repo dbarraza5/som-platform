@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import type { TrainingDimension } from '@/types/trainingFiles'
 
@@ -10,9 +11,43 @@ interface ClassificationFormProps {
 
 export default function ClassificationForm({ dimensions }: ClassificationFormProps) {
   const [values, setValues] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  function setValue(nombre: string, value: string) {
+    setValues((prev) => ({ ...prev, [nombre]: value }))
+    // Clear the error for this field as the user types
+    if (errors[nombre]) setErrors((prev) => { const next = { ...prev }; delete next[nombre]; return next })
+  }
 
   function handleClear() {
     setValues({})
+    setErrors({})
+  }
+
+  function handleClasificar() {
+    const newErrors: Record<string, string> = {}
+
+    for (const dim of dimensions) {
+      const raw = values[dim.nombre] ?? ''
+
+      if (dim.tipo_dato === 'continuo') {
+        if (raw === '') {
+          newErrors[dim.nombre] = 'Campo requerido.'
+        } else {
+          const num = parseFloat(raw)
+          if (isNaN(num)) {
+            newErrors[dim.nombre] = 'Debe ser un número.'
+          } else if (num < dim.min || num > dim.max) {
+            newErrors[dim.nombre] = `Debe estar entre ${dim.min} y ${dim.max}.`
+          }
+        }
+      } else {
+        if (raw === '') newErrors[dim.nombre] = 'Selecciona una opción.'
+      }
+    }
+
+    setErrors(newErrors)
+    // Classification logic goes here in a future phase
   }
 
   return (
@@ -24,32 +59,48 @@ export default function ClassificationForm({ dimensions }: ClassificationFormPro
         Ingresar un registro para clasificar y localizar en el mapa.
       </p>
 
-      <div className="mt-3 space-y-2.5">
+      <div className="mt-3 space-y-3">
         {dimensions.map((dim) => (
-          <div key={dim.nombre} className="space-y-1">
+          <div key={dim.nombre}>
             <Label htmlFor={`cls-${dim.nombre}`} className="truncate text-xs">
               {dim.nombre}
             </Label>
-            <Input
-              id={`cls-${dim.nombre}`}
-              type="text"
-              placeholder={
-                dim.tipo_dato === 'discreto' && dim.rango
-                  ? dim.rango.join(' / ')
-                  : `${dim.min} – ${dim.max}`
-              }
-              value={values[dim.nombre] ?? ''}
-              onChange={(e) =>
-                setValues((prev) => ({ ...prev, [dim.nombre]: e.target.value }))
-              }
-              className="h-8 text-sm"
-            />
+
+            {dim.tipo_dato === 'continuo' ? (
+              <Input
+                id={`cls-${dim.nombre}`}
+                type="number"
+                min={dim.min}
+                max={dim.max}
+                step={0.01}
+                placeholder={`Ej: ${dim.min} - ${dim.max}`}
+                value={values[dim.nombre] ?? ''}
+                onChange={(e) => setValue(dim.nombre, e.target.value)}
+                className={`mt-1 h-8 text-sm ${errors[dim.nombre] ? 'border-destructive' : ''}`}
+              />
+            ) : (
+              <Select
+                id={`cls-${dim.nombre}`}
+                value={values[dim.nombre] ?? ''}
+                onChange={(e) => setValue(dim.nombre, e.target.value)}
+                className={`mt-1 h-8 text-sm ${errors[dim.nombre] ? 'border-destructive' : ''}`}
+              >
+                <option value="">Seleccionar...</option>
+                {dim.rango?.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </Select>
+            )}
+
+            {errors[dim.nombre] && (
+              <p className="mt-0.5 text-xs text-destructive">{errors[dim.nombre]}</p>
+            )}
           </div>
         ))}
       </div>
 
       <div className="mt-4 flex gap-2">
-        <Button size="sm" className="flex-1" disabled>
+        <Button size="sm" className="flex-1" onClick={handleClasificar}>
           Clasificar
         </Button>
         <Button size="sm" variant="outline" onClick={handleClear}>
