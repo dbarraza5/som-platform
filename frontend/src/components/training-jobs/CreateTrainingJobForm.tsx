@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -20,6 +21,7 @@ const createTrainingJobFormSchema = z.object({
   topology: z.enum(['20', '30', '40', '50', '60', '80']),
   alpha: z.coerce.number().positive('Alpha debe ser mayor que 0'),
   omega: z.coerce.number().positive('Omega debe ser mayor que 0'),
+  neighborhoodRadius: z.coerce.number().int().positive('El rango de vecindad debe ser mayor que 0'),
 })
 
 export type CreateTrainingJobFormValues = z.infer<typeof createTrainingJobFormSchema>
@@ -32,6 +34,8 @@ interface CreateTrainingJobFormProps {
   submitError?: string | null
 }
 
+const DEFAULT_TOPOLOGY_OPTION = getTopologyOption(DEFAULT_TOPOLOGY)
+
 export default function CreateTrainingJobForm({
   dataset,
   onSubmit,
@@ -43,6 +47,8 @@ export default function CreateTrainingJobForm({
     register,
     handleSubmit,
     watch,
+    setValue,
+    getValues,
     formState: { errors },
   } = useForm<CreateTrainingJobFormValues>({
     resolver: zodResolver(createTrainingJobFormSchema),
@@ -50,17 +56,34 @@ export default function CreateTrainingJobForm({
       topology: DEFAULT_TOPOLOGY,
       alpha: DEFAULT_ALPHA,
       omega: DEFAULT_OMEGA,
+      neighborhoodRadius: DEFAULT_TOPOLOGY_OPTION.defaultNeighborhoodRadius,
     },
   })
 
-  const topology = getTopologyOption(watch('topology'))
+  const topologyValue = watch('topology')
+  const topology = getTopologyOption(topologyValue)
   const alpha = Number(watch('alpha'))
   const omega = Number(watch('omega'))
+  const neighborhoodRadius = Number(watch('neighborhoodRadius'))
   const neuronCount = topology.width * topology.height
+
+  // When topology changes, clamp neighborhoodRadius to the new max.
+  useEffect(() => {
+    const current = Number(getValues('neighborhoodRadius'))
+    if (current > topology.maxNeighborhoodRadius) {
+      setValue('neighborhoodRadius', topology.defaultNeighborhoodRadius)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topologyValue])
 
   const datasetStatus = getDatasetPipelineStatus(dataset)
   const statusMeta = DATASET_STATUS_META[datasetStatus]
   const canTrain = datasetStatus === 'COMPLETED'
+
+  const radiusOptions = Array.from(
+    { length: topology.maxNeighborhoodRadius },
+    (_, i) => i + 1,
+  )
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -102,7 +125,7 @@ export default function CreateTrainingJobForm({
           <p className="text-xs text-muted-foreground">{neuronCount} neuronas</p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="alpha">Alpha</Label>
             <Input id="alpha" type="number" step="0.01" min="0" disabled={!canTrain} {...register('alpha')} />
@@ -112,6 +135,19 @@ export default function CreateTrainingJobForm({
             <Label htmlFor="omega">Omega</Label>
             <Input id="omega" type="number" step="0.001" min="0" disabled={!canTrain} {...register('omega')} />
             {errors.omega && <p className="text-xs text-destructive">{errors.omega.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="neighborhoodRadius">Rango de vecindad</Label>
+            <Select id="neighborhoodRadius" disabled={!canTrain} {...register('neighborhoodRadius')}>
+              {radiusOptions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </Select>
+            {errors.neighborhoodRadius && (
+              <p className="text-xs text-destructive">{errors.neighborhoodRadius.message}</p>
+            )}
           </div>
         </div>
       </div>
@@ -142,6 +178,10 @@ export default function CreateTrainingJobForm({
           <div>
             <dt className="text-xs text-muted-foreground">Omega</dt>
             <dd className="font-medium">{Number.isFinite(omega) ? omega : '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Rango vecindad</dt>
+            <dd className="font-medium">{Number.isFinite(neighborhoodRadius) ? neighborhoodRadius : '—'}</dd>
           </div>
         </dl>
       </div>

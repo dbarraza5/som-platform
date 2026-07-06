@@ -23,7 +23,7 @@ import CreateTrainingJobForm, {
   type CreateTrainingJobFormValues,
 } from '@/components/training-jobs/CreateTrainingJobForm'
 import { getDatasetPipelineStatus, isDatasetPipelineActive } from '@/lib/datasetStatus'
-import { getTopologyOption, DEFAULT_NEIGHBORHOOD_RADIUS, DEFAULT_OBJECTIVE_DIMENSION_WEIGHT } from '@/lib/somDefaults'
+import { getTopologyOption, DEFAULT_OBJECTIVE_DIMENSION_WEIGHT } from '@/lib/somDefaults'
 import { getTrainingDisplayStatus, isTrainingDisplayStatusActive } from '@/lib/trainingJobStatus'
 import type { Dataset } from '@/types/dataset'
 import type { TrainingJob } from '@/types/trainingJob'
@@ -89,7 +89,7 @@ export default function DatasetDetailPage() {
         gridHeight: topology.height,
         alpha: values.alpha,
         beta: values.omega,
-        neighborhoodRadius: DEFAULT_NEIGHBORHOOD_RADIUS,
+        neighborhoodRadius: values.neighborhoodRadius,
         objectiveDimensionWeight: DEFAULT_OBJECTIVE_DIMENSION_WEIGHT,
       })
     },
