@@ -74,9 +74,16 @@ export default function TrainingJobMonitorCard({ trainingJob, onCreateNew }: Tra
         </div>
 
         {displayStatus === 'COMPLETED' && trainingJob.finishedAt && (
-          <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-            El entrenamiento terminó correctamente el {formatDateTime(trainingJob.finishedAt)}.
-          </p>
+          <>
+            <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+              El entrenamiento terminó correctamente el {formatDateTime(trainingJob.finishedAt)}.
+            </p>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={onCreateNew}>
+                Crear nuevo entrenamiento
+              </Button>
+            </div>
+          </>
         )}
 
         {displayStatus === 'FAILED' && (
