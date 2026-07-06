@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { calcularRadio, calcularCentro, calcularVertices } from './hooks/useHexGrid'
 import { normalizarDimension, normalizarActivacion, valorAColor } from './hooks/useHeatmap'
+import type { ColorStop } from './hooks/useHeatmap'
 
 interface HeatmapCanvasProps {
   weights: number[][]
@@ -8,6 +9,7 @@ interface HeatmapCanvasProps {
   activeDimensionIndex: number
   gridWidth: number
   gridHeight: number
+  palette: ColorStop[]
 }
 
 export default function HeatmapCanvas({
@@ -16,6 +18,7 @@ export default function HeatmapCanvas({
   activeDimensionIndex,
   gridWidth,
   gridHeight,
+  palette,
 }: HeatmapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -56,7 +59,7 @@ export default function HeatmapCanvas({
         const neuronIndex = row * gridWidth + col
         const { cx, cy } = calcularCentro(col, row, radio)
         const vertices = calcularVertices(cx, cy, radio)
-        const color = valorAColor(normalizedValues[neuronIndex] ?? 0)
+        const color = valorAColor(normalizedValues[neuronIndex] ?? 0, palette)
 
         ctx.fillStyle = color
         ctx.beginPath()
@@ -70,7 +73,7 @@ export default function HeatmapCanvas({
         ctx.stroke()
       }
     }
-  }, [size, activeDimensionIndex, weights, activation, gridWidth, gridHeight])
+  }, [size, activeDimensionIndex, weights, activation, gridWidth, gridHeight, palette])
 
   return (
     <div ref={containerRef} style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
