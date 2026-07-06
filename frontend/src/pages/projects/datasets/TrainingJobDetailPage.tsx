@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
@@ -12,7 +13,7 @@ import TrainingHeader from './visualizer/TrainingHeader'
 import DimensionPanel from './visualizer/DimensionPanel'
 import ClassificationForm from './visualizer/ClassificationForm'
 import LayersPanel from './visualizer/LayersPanel'
-import SomCanvas from './visualizer/SomCanvas'
+import SomCanvas from '@/components/training/SomCanvas'
 import NeuronDetail from './visualizer/NeuronDetail'
 import ClassificationResult from './visualizer/ClassificationResult'
 
@@ -40,11 +41,7 @@ export default function TrainingJobDetailPage() {
 
   const { data: weights } = useTrainingWeights(projectId!, datasetId!, trainingId!)
   const { data: activation } = useTrainingActivation(projectId!, datasetId!, trainingId!)
-
-  // Suppress unused-variable warnings — weights and activation are loaded
-  // here so the data is ready for future phases (rendering the SOM map).
-  void weights
-  void activation
+  const [activeDimensionIndex, setActiveDimensionIndex] = useState(0)
 
   async function handleLogout() {
     if (refreshToken) await authApi.logout(refreshToken).catch(() => {})
@@ -103,12 +100,20 @@ export default function TrainingJobDetailPage() {
               dimsLoading={dimsLoading}
               dimsNotFound={dimsNotFound}
               dimensions={dimensions}
+              onSelectionChange={setActiveDimensionIndex}
             />
           </aside>
 
           {/* SOM Canvas */}
           <main className="order-1 min-h-64 min-w-0 flex-1 lg:order-2 lg:min-h-0">
-            <SomCanvas />
+            <SomCanvas
+              weights={weights ?? []}
+              activation={activation ?? []}
+              dimensions={dimensions ?? []}
+              activeDimensionIndex={activeDimensionIndex}
+              gridWidth={trainingJob.gridWidth}
+              gridHeight={trainingJob.gridHeight}
+            />
           </main>
 
           {/* Right panel */}
@@ -128,10 +133,12 @@ function LeftPanelContent({
   dimsLoading,
   dimsNotFound,
   dimensions,
+  onSelectionChange,
 }: {
   dimsLoading: boolean
   dimsNotFound: boolean
   dimensions: ReturnType<typeof useTrainingDimensions>['data']
+  onSelectionChange: (index: number) => void
 }) {
   if (dimsLoading) {
     return (
@@ -155,7 +162,7 @@ function LeftPanelContent({
 
   return (
     <>
-      <DimensionPanel dimensions={dimensions} />
+      <DimensionPanel dimensions={dimensions} onSelectionChange={onSelectionChange} />
       <ClassificationForm dimensions={dimensions} />
       <LayersPanel />
     </>

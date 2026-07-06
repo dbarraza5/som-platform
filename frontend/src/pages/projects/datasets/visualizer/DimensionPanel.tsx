@@ -4,11 +4,12 @@ import type { TrainingDimension } from '@/types/trainingFiles'
 
 interface DimensionPanelProps {
   dimensions: TrainingDimension[]
+  onSelectionChange?: (index: number) => void
 }
 
 const ACTIVATION_VALUE = '__activation__'
 
-export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
+export default function DimensionPanel({ dimensions, onSelectionChange }: DimensionPanelProps) {
   const options = [...dimensions.map((d) => d.nombre), ACTIVATION_VALUE]
   const labelOf = (v: string) => (v === ACTIVATION_VALUE ? 'Activación de la Red' : v)
 
@@ -21,8 +22,11 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
 
   // Reset selection when dimensions load
   useEffect(() => {
-    if (dimensions.length > 0) setSelected(dimensions[0].nombre)
-  }, [dimensions])
+    if (dimensions.length > 0) {
+      setSelected(dimensions[0].nombre)
+      onSelectionChange?.(0)
+    }
+  }, [dimensions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function openDropdown() {
     if (triggerRef.current) {
@@ -59,6 +63,8 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
     setSelected(value)
     setOpen(false)
     setQuery('')
+    const index = value === ACTIVATION_VALUE ? -1 : dimensions.findIndex((d) => d.nombre === value)
+    onSelectionChange?.(index)
   }
 
   return (
