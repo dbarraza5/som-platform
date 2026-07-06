@@ -110,3 +110,32 @@ The progress bar (`src/components/ui/progress.tsx`, a plain styled `<div>` rathe
 ### Completion and failure
 
 On `COMPLETED`, the card hides the progress bar, shows "Entrenamiento completado" plus a green confirmation line with the finish date — nothing about the trained model itself (no weights, no visualization) is shown yet, per this phase's scope. On `FAILED`, the card shows "Entrenamiento fallido", the Backend's `errorMessage` if one was reported, and a "Crear nuevo entrenamiento" button that reopens the same configuration modal from Phase 10.7.1 (there is deliberately no such button after `COMPLETED` — the phase brief only calls for allowing a retry after a failure).
+
+## Training catalog and detail page (Phase 10.7.3)
+
+A Dataset can have many `TrainingJob`s — Phase 10.7.2 only ever showed the most recent one. This phase adds a full catalog below it, and a dedicated page to act as the future home for each run's results.
+
+Two more minimal, JWT-authenticated Backend endpoints were added under the same `/projects/:projectId/datasets/:datasetId/training-jobs` router (same ownership-check pattern as `/latest`, no other Backend/Worker logic touched):
+
+| Endpoint | Used for |
+|---|---|
+| `GET /training-jobs` | The catalog — every `TrainingJob` for the Dataset, newest first (`ORDER BY createdAt DESC`). |
+| `GET /training-jobs/:id` | The training detail page — a single `TrainingJob`, 404 if it doesn't belong to this Dataset. |
+
+### Dataset ↔ TrainingJob relationship
+
+Unchanged from the domain model in the root `CLAUDE.md`: a `Dataset` has many `TrainingJob`s, each one an independent SOM run with its own topology/parameters/results. Nothing before this phase let a user see more than the single latest one — `DatasetDetailPage` now fetches the full list (`['trainingJobs', datasetId]`, no polling — it only needs to refetch when a new job is created, which the create mutation already invalidates alongside `['trainingJob', 'latest', datasetId]`) and treats it as the catalog data source.
+
+### Catalog section
+
+`TrainingJobCatalogSection` (`src/pages/projects/datasets/components/TrainingJobCatalogSection.tsx`) renders below the Dataset info / monitor card grid, titled "Entrenamientos anteriores". It follows the same `Card` + `divide-y` list pattern already used for Datasets inside `ProjectDetailPage` and Projects inside `DashboardPage` — a `TrainingJobListItem` (`src/components/training-jobs/TrainingJobListItem.tsx`) per row, reusing `TRAINING_STATUS_META` for the status badge/icon so it looks identical to the monitor card's own status treatment. Each row shows status, start/finish dates, duration, topology, neuron count, Alpha and Omega, and a "Ver detalle" button.
+
+**Never duplicated with the current training**: the monitor card already displays the most recent `TrainingJob` regardless of status (Phase 10.7.2's behavior, unchanged). The catalog is that same full list with the current one filtered out client-side (`catalogTrainingJobs = allTrainingJobs.filter(job => job.id !== latestTrainingJob?.id)`), so a job is always shown in exactly one place on the page. If a Dataset has zero `TrainingJob`s at all, the catalog shows its own empty-state message rather than being hidden — it is not conditional on the monitor card existing.
+
+### Navigation to the detail page
+
+Each catalog row's "Ver detalle" links to `/projects/:id/datasets/:datasetId/trainings/:trainingId` (added to `src/router/index.tsx`, `RequireAuth`-guarded like every other page). `TrainingJobDetailPage` (`src/pages/projects/datasets/TrainingJobDetailPage.tsx`) fetches that one `TrainingJob` and shows the same status header plus a fuller info grid (topology, neurons, Alpha, Omega, final iteration/cycle, start/finish dates, error message if failed) than the compact catalog row.
+
+### Preparation for future phases
+
+Below the info card, the page renders a second Card with a placeholder: "Visualización disponible en la siguiente iteración." This is deliberately the *only* thing missing — the page already fetches and displays the real `TrainingJob` (not a static mock), so a future phase only needs to add the SOM map, trained weights, neuron activation, and generated-files views into this same page; no new routing, data-fetching, or ownership-check work will be needed then. Explicitly not built yet, per this phase's scope: model visualization, comparing runs, deleting/editing a `TrainingJob`, and downloading result files.

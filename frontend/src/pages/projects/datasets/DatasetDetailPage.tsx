@@ -19,6 +19,7 @@ import DatasetPipeline from './components/DatasetPipeline'
 import DatasetInfoCard from './components/DatasetInfoCard'
 import DatasetTrainingCard from './components/DatasetTrainingCard'
 import TrainingJobMonitorCard from './components/TrainingJobMonitorCard'
+import TrainingJobCatalogSection from './components/TrainingJobCatalogSection'
 import DatasetDetailSkeleton from './components/DatasetDetailSkeleton'
 import CreateTrainingJobForm, {
   type CreateTrainingJobFormValues,
@@ -61,6 +62,17 @@ export default function DatasetDetailPage() {
     },
   })
 
+  const { data: allTrainingJobs, isLoading: isLoadingTrainingJobs } = useQuery({
+    queryKey: ['trainingJobs', datasetId],
+    queryFn: () => trainingJobsApi.getAll(projectId!, datasetId!).then((r) => r.data.data.trainingJobs),
+    enabled: !!projectId && !!datasetId,
+  })
+
+  // The monitor card above already shows the most recent TrainingJob (any
+  // status) — the catalog only lists the rest, so the same job never
+  // appears twice on the page.
+  const catalogTrainingJobs = (allTrainingJobs ?? []).filter((job) => job.id !== latestTrainingJob?.id)
+
   const uploadMutation = useMutation({
     mutationFn: (file: File) => datasetsApi.upload(datasetId!, file),
     onSuccess: (res) => {
@@ -87,6 +99,7 @@ export default function DatasetDetailPage() {
     onSuccess: () => {
       setShowTrainingModal(false)
       queryClient.invalidateQueries({ queryKey: ['trainingJob', 'latest', datasetId] })
+      queryClient.invalidateQueries({ queryKey: ['trainingJobs', datasetId] })
     },
   })
 
@@ -158,6 +171,13 @@ export default function DatasetDetailPage() {
             <DatasetTrainingCard dataset={dataset} onCreateTraining={handleCreateTraining} />
           )}
         </div>
+
+        <TrainingJobCatalogSection
+          trainingJobs={catalogTrainingJobs}
+          projectId={projectId!}
+          datasetId={datasetId!}
+          isLoading={isLoadingTrainingJobs}
+        />
       </div>
 
       <Dialog open={showTrainingModal} onOpenChange={setShowTrainingModal}>

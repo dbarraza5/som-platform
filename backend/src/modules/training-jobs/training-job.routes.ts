@@ -11,7 +11,11 @@ import { createTrainingJobSchema, reportTrainingJobStatusSchema } from './traini
 export const trainingJobRouter = Router({ mergeParams: true })
 trainingJobRouter.use(authenticate)
 trainingJobRouter.post('/', validate(createTrainingJobSchema), asyncHandler(trainingJobController.create))
+trainingJobRouter.get('/', asyncHandler(trainingJobController.list))
 trainingJobRouter.get('/latest', asyncHandler(trainingJobController.getLatest))
+// Must come after the literal '/latest' route above — Express would
+// otherwise match "latest" as this route's :id parameter.
+trainingJobRouter.get('/:id', asyncHandler(trainingJobController.getById))
 
 // Mounted at /api/internal/training-jobs — Worker-to-backend only, authenticated
 // via a shared API key (internalAuth), never a user JWT.

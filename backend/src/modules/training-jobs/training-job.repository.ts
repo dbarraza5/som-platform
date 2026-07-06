@@ -45,6 +45,13 @@ export const trainingJobRepository = {
     })
   },
 
+  findAllByDatasetId(datasetId: string) {
+    return prisma.trainingJob.findMany({
+      where: { datasetId },
+      orderBy: { createdAt: 'desc' },
+    })
+  },
+
   findAllByStatus(status: TrainingJobStatusValue) {
     return prisma.trainingJob.findMany({ where: { status } })
   },

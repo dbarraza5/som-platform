@@ -17,4 +17,14 @@ export const trainingJobsApi = {
     api.get<ApiResponse<{ trainingJob: TrainingJob | null }>>(
       `/projects/${projectId}/datasets/${datasetId}/training-jobs/latest`,
     ),
+
+  getAll: (projectId: string, datasetId: string) =>
+    api.get<ApiResponse<{ trainingJobs: TrainingJob[] }>>(
+      `/projects/${projectId}/datasets/${datasetId}/training-jobs`,
+    ),
+
+  getById: (projectId: string, datasetId: string, trainingJobId: string) =>
+    api.get<ApiResponse<{ trainingJob: TrainingJob }>>(
+      `/projects/${projectId}/datasets/${datasetId}/training-jobs/${trainingJobId}`,
+    ),
 }

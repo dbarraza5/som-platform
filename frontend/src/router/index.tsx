@@ -10,6 +10,7 @@ import ProjectDetailPage from '@/pages/projects/ProjectDetailPage'
 import NewDatasetPage from '@/pages/projects/datasets/NewDatasetPage'
 import EditDatasetPage from '@/pages/projects/datasets/EditDatasetPage'
 import DatasetDetailPage from '@/pages/projects/datasets/DatasetDetailPage'
+import TrainingJobDetailPage from '@/pages/projects/datasets/TrainingJobDetailPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken)
@@ -61,5 +62,9 @@ export const router = createBrowserRouter([
   {
     path: '/projects/:id/datasets/:datasetId/edit',
     element: <RequireAuth><EditDatasetPage /></RequireAuth>,
+  },
+  {
+    path: '/projects/:id/datasets/:datasetId/trainings/:trainingId',
+    element: <RequireAuth><TrainingJobDetailPage /></RequireAuth>,
   },
 ])

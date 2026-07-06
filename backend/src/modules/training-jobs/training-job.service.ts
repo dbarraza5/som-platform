@@ -74,13 +74,33 @@ export const trainingJobService = {
   },
 
   // Called by the Frontend (user JWT) to drive the Phase 10.7.2 monitoring
-  // card. Only the most recent TrainingJob is exposed — no history/listing
-  // endpoint exists yet, matching this phase's scope.
+  // card. Only the most recent TrainingJob is exposed here — see list()
+  // below for the full catalog (Phase 10.7.3).
   async getLatestForDataset(projectId: string, datasetId: string, userId: string) {
     const dataset = await datasetRepository.findById(datasetId)
     if (!dataset || dataset.projectId !== projectId) throw new Error('DATASET_NOT_FOUND')
     if (dataset.project.userId !== userId) throw new Error('FORBIDDEN')
     return trainingJobRepository.findLatestByDatasetId(datasetId)
+  },
+
+  // Called by the Frontend (user JWT) to render the Phase 10.7.3 training
+  // catalog — every TrainingJob ever created for this Dataset, newest first.
+  async list(projectId: string, datasetId: string, userId: string) {
+    const dataset = await datasetRepository.findById(datasetId)
+    if (!dataset || dataset.projectId !== projectId) throw new Error('DATASET_NOT_FOUND')
+    if (dataset.project.userId !== userId) throw new Error('FORBIDDEN')
+    return trainingJobRepository.findAllByDatasetId(datasetId)
+  },
+
+  // Called by the Frontend (user JWT) for the Phase 10.7.3 training detail
+  // page. Distinct from getByIdInternal below, which has no ownership check.
+  async getByIdForDataset(projectId: string, datasetId: string, trainingJobId: string, userId: string) {
+    const dataset = await datasetRepository.findById(datasetId)
+    if (!dataset || dataset.projectId !== projectId) throw new Error('DATASET_NOT_FOUND')
+    if (dataset.project.userId !== userId) throw new Error('FORBIDDEN')
+    const trainingJob = await trainingJobRepository.findById(trainingJobId)
+    if (!trainingJob || trainingJob.datasetId !== datasetId) throw new Error('TRAINING_JOB_NOT_FOUND')
+    return trainingJob
   },
 
   // Called by the Worker (internalAuth, not a user JWT) to look up a
