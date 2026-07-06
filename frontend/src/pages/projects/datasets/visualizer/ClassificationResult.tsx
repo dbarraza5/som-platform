@@ -7,17 +7,10 @@ export default function ClassificationResult() {
         Clasificación
       </p>
 
-      <div className="mt-4 flex flex-col items-center gap-2 py-6 text-center">
-        <MapPin className="h-5 w-5 text-muted-foreground/50" />
+      <div className="mt-3 flex flex-col items-center gap-2 py-4 text-center">
+        <MapPin className="h-4 w-4 text-muted-foreground/40" />
         <p className="text-xs text-muted-foreground">
           Ingresa un registro y presiona Clasificar.
-        </p>
-      </div>
-
-      {/* Reserved space for classification result + map thumbnail */}
-      <div className="mt-2 rounded-md border border-dashed p-3">
-        <p className="text-center text-xs text-muted-foreground/50">
-          Resultado y miniatura del mapa — fase posterior
         </p>
       </div>
     </div>

@@ -95,7 +95,7 @@ export default function TrainingJobDetailPage() {
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
 
           {/* Left panel */}
-          <aside className="order-2 w-full shrink-0 overflow-y-auto border-b bg-background lg:order-1 lg:w-72 lg:border-b-0 lg:border-r">
+          <aside className="order-2 w-full shrink-0 overflow-y-auto border-b bg-muted/60 lg:order-1 lg:w-72 lg:border-b-0 lg:border-r">
             <LeftPanelContent
               dimsLoading={dimsLoading}
               dimsNotFound={dimsNotFound}
@@ -117,7 +117,7 @@ export default function TrainingJobDetailPage() {
           </main>
 
           {/* Right panel */}
-          <aside className="order-3 w-full shrink-0 overflow-y-auto border-t bg-background lg:w-72 lg:border-l lg:border-t-0">
+          <aside className="order-3 w-full shrink-0 overflow-y-auto border-t bg-muted/60 lg:w-72 lg:border-l lg:border-t-0">
             <NeuronDetail />
             <ClassificationResult />
           </aside>

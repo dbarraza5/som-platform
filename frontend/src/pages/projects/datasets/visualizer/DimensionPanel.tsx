@@ -72,7 +72,6 @@ export default function DimensionPanel({ dimensions, onSelectionChange }: Dimens
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Dimensión
       </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">Visualizar por</p>
 
       <div ref={containerRef} className="relative mt-3">
         <div

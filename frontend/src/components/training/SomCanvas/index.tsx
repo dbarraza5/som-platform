@@ -126,15 +126,15 @@ export default function SomCanvas({
       </div>
 
       {/* Legend */}
-      <div className="shrink-0 px-6 py-3">
-        <p className="mb-1.5 text-center text-xs font-medium text-muted-foreground">
+      <div className="shrink-0 border-t px-6 py-3">
+        <p className="mb-1.5 text-center text-xs font-semibold text-foreground/70">
           {activeDimLabel}
         </p>
         <div
-          className="h-3 rounded-full"
+          className="h-4 rounded-sm shadow-sm"
           style={{ background: stopsToGradient(activePalette) }}
         />
-        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
+        <div className="mt-1 flex justify-between text-xs font-medium text-muted-foreground">
           <span>Bajo</span>
           <span>Alto</span>
         </div>

@@ -48,6 +48,9 @@ export default function HeatmapCanvas({
     ctx.scale(dpr, dpr)
 
     const radio = calcularRadio(size.width, size.height, gridWidth, gridHeight)
+    const SQRT3 = Math.sqrt(3)
+    const offsetX = (size.width - (gridWidth + 0.5) * SQRT3 * radio) / 2
+    const offsetY = (size.height - (gridHeight * 1.5 + 0.5) * radio) / 2
 
     const normalizedValues =
       activeDimensionIndex === -1
@@ -57,8 +60,8 @@ export default function HeatmapCanvas({
     for (let col = 0; col < gridWidth; col++) {
       for (let row = 0; row < gridHeight; row++) {
         const neuronIndex = row * gridWidth + col
-        const { cx, cy } = calcularCentro(col, row, radio)
-        const vertices = calcularVertices(cx, cy, radio)
+        const { cx: rawCx, cy: rawCy } = calcularCentro(col, row, radio)
+        const vertices = calcularVertices(rawCx + offsetX, rawCy + offsetY, radio)
         const color = valorAColor(normalizedValues[neuronIndex] ?? 0, palette)
 
         ctx.fillStyle = color

@@ -118,7 +118,7 @@ export default function TrainingHeader({
       </div>
 
       {/* Row 2 — technical sheet */}
-      <div className="flex items-center gap-6 overflow-x-auto px-4 pb-3 pt-0">
+      <div className="flex items-center gap-6 overflow-x-auto border-t bg-muted/60 px-4 py-2">
         <StatCell label="Topología" value={`${trainingJob.gridWidth} × ${trainingJob.gridHeight}`} />
         <div className="h-8 w-px shrink-0 bg-border" />
         <StatCell label="Neuronas" value={trainingJob.neuronCount.toLocaleString('es-ES')} />
