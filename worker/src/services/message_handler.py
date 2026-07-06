@@ -10,7 +10,19 @@ from .normalization_service import NormalizationService
 logger = logging.getLogger(__name__)
 
 _TEMP_BASE = "temp"
-_DELIMITER = ";"
+
+
+def _detect_delimiter(path: str) -> str:
+    """Returns ';' or ',' based on whichever appears more in the header line."""
+    try:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            first_line = f.readline()
+        delimiter = ";" if first_line.count(";") >= first_line.count(",") else ","
+        logger.info("[WORKER] Delimitador detectado: '%s'", delimiter)
+        return delimiter
+    except OSError:
+        logger.warning("[WORKER] No se pudo detectar el delimitador; usando ';' por defecto.")
+        return ";"
 
 
 def handle_message(message: dict) -> None:
@@ -45,8 +57,10 @@ def handle_message(message: dict) -> None:
 
         logger.info("[WORKER] Validación exitosa. Tamaño: %d bytes.", size)
 
+        delimiter = _detect_delimiter(temp_file)
+
         logger.info("[WORKER] Iniciando normalización...")
-        normalization = NormalizationService(delimiter=_DELIMITER)
+        normalization = NormalizationService(delimiter=delimiter)
         result = normalization.run(input_path=temp_file, output_dir=temp_dir)
 
         for output_path in (result.normalized_csv_path, result.dimensions_xml_path):

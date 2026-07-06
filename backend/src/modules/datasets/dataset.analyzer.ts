@@ -7,7 +7,7 @@ export interface AnalysisResult {
 }
 
 export const datasetAnalyzerService = {
-  analyze(stream: Readable): Promise<AnalysisResult> {
+  analyze(stream: Readable, delimiter: ',' | ';' = ','): Promise<AnalysisResult> {
     return new Promise((resolve, reject) => {
       let settled = false
       let headerColumns = 0
@@ -22,7 +22,7 @@ export const datasetAnalyzerService = {
         else resolve(result!)
       }
 
-      const parser = parse({ bom: true, relax_column_count: true })
+      const parser = parse({ bom: true, relax_column_count: true, delimiter })
 
       parser.on('data', (record: string[]) => {
         if (isFirstRow) {

@@ -5,6 +5,13 @@ import { datasetAnalyzerService } from './dataset.analyzer'
 import { getQueueService } from '../../queue'
 import type { QueueMessage } from '../../queue'
 
+function detectDelimiter(buffer: Buffer): ',' | ';' {
+  const firstLine = buffer.toString('utf-8', 0, Math.min(buffer.length, 4096)).split('\n')[0]
+  const semicolons = (firstLine.match(/;/g) ?? []).length
+  const commas = (firstLine.match(/,/g) ?? []).length
+  return semicolons >= commas ? ';' : ','
+}
+
 type CreateDatasetData = {
   name: string
   description?: string | null
@@ -84,10 +91,12 @@ export const datasetService = {
     // --- CSV analysis (Phase 6.4) — synchronous, runs in the same HTTP request ---
     await datasetRepository.updateAnalysis(id, { analysisStatus: 'PROCESSING' })
 
+    const delimiter = detectDelimiter(file.buffer)
+
     let analysisOk = false
     try {
       const stream = await storage.getReadStream(key)
-      const result = await datasetAnalyzerService.analyze(stream)
+      const result = await datasetAnalyzerService.analyze(stream, delimiter)
       await datasetRepository.updateAnalysis(id, {
         analysisStatus: 'COMPLETED',
         rows: result.rows,
