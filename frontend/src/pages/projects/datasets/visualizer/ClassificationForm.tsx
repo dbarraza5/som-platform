@@ -2,18 +2,17 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import type { TrainingDimension } from '@/types/trainingFiles'
 
 interface ClassificationFormProps {
-  dimensions: string[]
+  dimensions: TrainingDimension[]
 }
 
 export default function ClassificationForm({ dimensions }: ClassificationFormProps) {
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(dimensions.map((d) => [d, ''])),
-  )
+  const [values, setValues] = useState<Record<string, string>>({})
 
   function handleClear() {
-    setValues(Object.fromEntries(dimensions.map((d) => [d, ''])))
+    setValues({})
   }
 
   return (
@@ -27,16 +26,22 @@ export default function ClassificationForm({ dimensions }: ClassificationFormPro
 
       <div className="mt-3 space-y-2.5">
         {dimensions.map((dim) => (
-          <div key={dim} className="space-y-1">
-            <Label htmlFor={`cls-${dim}`} className="text-xs">
-              {dim}
+          <div key={dim.nombre} className="space-y-1">
+            <Label htmlFor={`cls-${dim.nombre}`} className="truncate text-xs">
+              {dim.nombre}
             </Label>
             <Input
-              id={`cls-${dim}`}
+              id={`cls-${dim.nombre}`}
               type="text"
-              placeholder={`Ej: valor de ${dim}`}
-              value={values[dim]}
-              onChange={(e) => setValues((prev) => ({ ...prev, [dim]: e.target.value }))}
+              placeholder={
+                dim.tipo_dato === 'discreto' && dim.rango
+                  ? dim.rango.join(' / ')
+                  : `${dim.min} – ${dim.max}`
+              }
+              value={values[dim.nombre] ?? ''}
+              onChange={(e) =>
+                setValues((prev) => ({ ...prev, [dim.nombre]: e.target.value }))
+              }
               className="h-8 text-sm"
             />
           </div>

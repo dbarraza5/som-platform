@@ -13,8 +13,10 @@ trainingJobRouter.use(authenticate)
 trainingJobRouter.post('/', validate(createTrainingJobSchema), asyncHandler(trainingJobController.create))
 trainingJobRouter.get('/', asyncHandler(trainingJobController.list))
 trainingJobRouter.get('/latest', asyncHandler(trainingJobController.getLatest))
-// Must come after the literal '/latest' route above — Express would
-// otherwise match "latest" as this route's :id parameter.
+// Literal sub-routes must come before /:id to avoid being consumed as the param.
+trainingJobRouter.get('/:id/dimensions', asyncHandler(trainingJobController.getDimensions))
+trainingJobRouter.get('/:id/weights', asyncHandler(trainingJobController.getWeights))
+trainingJobRouter.get('/:id/activation', asyncHandler(trainingJobController.getActivation))
 trainingJobRouter.get('/:id', asyncHandler(trainingJobController.getById))
 
 // Mounted at /api/internal/training-jobs — Worker-to-backend only, authenticated

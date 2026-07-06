@@ -1,22 +1,29 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
+import type { TrainingDimension } from '@/types/trainingFiles'
 
 interface DimensionPanelProps {
-  dimensions: string[]
+  dimensions: TrainingDimension[]
 }
 
-export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
-  const ALL_OPTIONS = [...dimensions, '__activation__']
-  const labelOf = (v: string) => (v === '__activation__' ? 'Activación de la Red' : v)
+const ACTIVATION_VALUE = '__activation__'
 
-  const [selected, setSelected] = useState(dimensions[0] ?? '__activation__')
+export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
+  const options = [...dimensions.map((d) => d.nombre), ACTIVATION_VALUE]
+  const labelOf = (v: string) => (v === ACTIVATION_VALUE ? 'Activación de la Red' : v)
+
+  const [selected, setSelected] = useState(dimensions[0]?.nombre ?? ACTIVATION_VALUE)
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
   const triggerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // position the fixed dropdown below the trigger
+  // Reset selection when dimensions load
+  useEffect(() => {
+    if (dimensions.length > 0) setSelected(dimensions[0].nombre)
+  }, [dimensions])
+
   function openDropdown() {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
@@ -32,7 +39,6 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
     setQuery('')
   }
 
-  // close on click outside
   useEffect(() => {
     if (!open) return
     function handleClickOutside(e: MouseEvent) {
@@ -45,7 +51,7 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
 
-  const filtered = ALL_OPTIONS.filter((v) =>
+  const filtered = options.filter((v) =>
     labelOf(v).toLowerCase().includes(query.toLowerCase()),
   )
 
@@ -63,7 +69,6 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
       <p className="mt-0.5 text-xs text-muted-foreground">Visualizar por</p>
 
       <div ref={containerRef} className="relative mt-3">
-        {/* Trigger */}
         <div
           ref={triggerRef}
           onClick={() => (open ? setOpen(false) : openDropdown())}
@@ -75,10 +80,8 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         </div>
 
-        {/* Dropdown rendered at fixed position to escape overflow-y-auto */}
         {open && (
           <div style={dropdownStyle} className="overflow-hidden rounded-md border bg-background shadow-lg">
-            {/* Search */}
             <div className="border-b px-2 py-2">
               <input
                 autoFocus
@@ -88,17 +91,15 @@ export default function DimensionPanel({ dimensions }: DimensionPanelProps) {
                 className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </div>
-
-            {/* Options */}
             <ul className="max-h-52 overflow-y-auto py-1">
               {filtered.length === 0 && (
                 <li className="px-3 py-2 text-xs text-muted-foreground">Sin resultados</li>
               )}
               {filtered.map((v) => {
-                const isSpecial = v === '__activation__'
+                const isSpecial = v === ACTIVATION_VALUE
                 return (
                   <li key={v}>
-                    {isSpecial && filtered.some((x) => x !== '__activation__') && (
+                    {isSpecial && filtered.some((x) => x !== ACTIVATION_VALUE) && (
                       <div className="mx-2 my-1 border-t" />
                     )}
                     <button

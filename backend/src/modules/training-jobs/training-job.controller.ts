@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { trainingJobService } from './training-job.service'
+import { trainingFilesService } from './training-job.files.service'
 import { success, error } from '../../utils/response'
 
 function handleTrainingJobError(err: unknown, res: Response): boolean {
@@ -26,6 +27,10 @@ function handleTrainingJobError(err: unknown, res: Response): boolean {
     }
     if (err.message === 'INVALID_STATUS') {
       error(res, 'Invalid status query parameter', 400)
+      return true
+    }
+    if (err.message === 'FILE_NOT_FOUND') {
+      error(res, 'Training output files have not been generated yet', 404)
       return true
     }
   }
@@ -105,6 +110,48 @@ export const trainingJobController = {
     try {
       const trainingJobs = await trainingJobService.listByStatusInternal(req.query.status as string)
       success(res, { trainingJobs })
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
+  async getDimensions(req: Request, res: Response) {
+    try {
+      const dimensions = await trainingFilesService.getDimensions(
+        req.params.projectId,
+        req.params.datasetId,
+        req.params.id,
+        req.user!.id,
+      )
+      success(res, { dimensions })
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
+  async getWeights(req: Request, res: Response) {
+    try {
+      const weights = await trainingFilesService.getWeights(
+        req.params.projectId,
+        req.params.datasetId,
+        req.params.id,
+        req.user!.id,
+      )
+      success(res, { weights })
+    } catch (err) {
+      if (!handleTrainingJobError(err, res)) throw err
+    }
+  },
+
+  async getActivation(req: Request, res: Response) {
+    try {
+      const activation = await trainingFilesService.getActivation(
+        req.params.projectId,
+        req.params.datasetId,
+        req.params.id,
+        req.user!.id,
+      )
+      success(res, { activation })
     } catch (err) {
       if (!handleTrainingJobError(err, res)) throw err
     }

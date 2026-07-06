@@ -1,10 +1,13 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
 import { trainingJobsApi } from '@/api/trainingJobs'
 import { authApi } from '@/api/auth'
 import { useAuthStore } from '@/store/authStore'
 import { Button } from '@/components/ui/button'
+import { useTrainingDimensions } from '@/hooks/useTrainingDimensions'
+import { useTrainingWeights } from '@/hooks/useTrainingWeights'
+import { useTrainingActivation } from '@/hooks/useTrainingActivation'
 import TrainingHeader from './visualizer/TrainingHeader'
 import DimensionPanel from './visualizer/DimensionPanel'
 import ClassificationForm from './visualizer/ClassificationForm'
@@ -12,7 +15,6 @@ import LayersPanel from './visualizer/LayersPanel'
 import SomCanvas from './visualizer/SomCanvas'
 import NeuronDetail from './visualizer/NeuronDetail'
 import ClassificationResult from './visualizer/ClassificationResult'
-import { MOCK_DIMENSIONS } from './visualizer/mockData'
 
 export default function TrainingJobDetailPage() {
   const { id: projectId, datasetId, trainingId } = useParams<{
@@ -23,12 +25,26 @@ export default function TrainingJobDetailPage() {
   const navigate = useNavigate()
   const { user, refreshToken, clearAuth } = useAuthStore()
 
-  const { data: trainingJob, isLoading } = useQuery({
+  const { data: trainingJob, isLoading: jobLoading } = useQuery({
     queryKey: ['trainingJob', trainingId],
     queryFn: () =>
       trainingJobsApi.getById(projectId!, datasetId!, trainingId!).then((r) => r.data.data.trainingJob),
     enabled: !!projectId && !!datasetId && !!trainingId,
   })
+
+  const {
+    data: dimensions,
+    isLoading: dimsLoading,
+    isNotFound: dimsNotFound,
+  } = useTrainingDimensions(projectId!, datasetId!, trainingId!)
+
+  const { data: weights } = useTrainingWeights(projectId!, datasetId!, trainingId!)
+  const { data: activation } = useTrainingActivation(projectId!, datasetId!, trainingId!)
+
+  // Suppress unused-variable warnings — weights and activation are loaded
+  // here so the data is ready for future phases (rendering the SOM map).
+  void weights
+  void activation
 
   async function handleLogout() {
     if (refreshToken) await authApi.logout(refreshToken).catch(() => {})
@@ -37,7 +53,7 @@ export default function TrainingJobDetailPage() {
   }
 
   // ── Loading ────────────────────────────────────────────────────────────────
-  if (isLoading) {
+  if (jobLoading) {
     return (
       <div className="flex h-screen flex-col bg-background">
         <NavBar userName={user?.nombre} onLogout={handleLogout} />
@@ -71,28 +87,26 @@ export default function TrainingJobDetailPage() {
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <NavBar userName={user?.nombre} onLogout={handleLogout} />
 
-      {/* Below the app nav bar */}
       <div className="flex min-h-0 flex-1 flex-col">
-
-        {/* Training header: breadcrumb + tech sheet */}
         <TrainingHeader
           trainingJob={trainingJob}
           projectId={projectId!}
           datasetId={datasetId!}
-          dimensionCount={MOCK_DIMENSIONS.length}
+          dimensionCount={dimensions?.length ?? 0}
         />
 
-        {/* Three-column body */}
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
 
           {/* Left panel */}
           <aside className="order-2 w-full shrink-0 overflow-y-auto border-b bg-background lg:order-1 lg:w-72 lg:border-b-0 lg:border-r">
-            <DimensionPanel dimensions={MOCK_DIMENSIONS} />
-            <ClassificationForm dimensions={MOCK_DIMENSIONS} />
-            <LayersPanel />
+            <LeftPanelContent
+              dimsLoading={dimsLoading}
+              dimsNotFound={dimsNotFound}
+              dimensions={dimensions}
+            />
           </aside>
 
-          {/* SOM Canvas — fills all remaining space */}
+          {/* SOM Canvas */}
           <main className="order-1 min-h-64 min-w-0 flex-1 lg:order-2 lg:min-h-0">
             <SomCanvas />
           </main>
@@ -109,7 +123,46 @@ export default function TrainingJobDetailPage() {
   )
 }
 
-// ── Shared nav bar ─────────────────────────────────────────────────────────
+// ── Left panel content ─────────────────────────────────────────────────────
+function LeftPanelContent({
+  dimsLoading,
+  dimsNotFound,
+  dimensions,
+}: {
+  dimsLoading: boolean
+  dimsNotFound: boolean
+  dimensions: ReturnType<typeof useTrainingDimensions>['data']
+}) {
+  if (dimsLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">Cargando dimensiones...</p>
+      </div>
+    )
+  }
+
+  if (dimsNotFound || !dimensions) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+        <AlertCircle className="h-5 w-5 text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">
+          Los archivos del entrenamiento aún no han sido generados.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <DimensionPanel dimensions={dimensions} />
+      <ClassificationForm dimensions={dimensions} />
+      <LayersPanel />
+    </>
+  )
+}
+
+// ── Nav bar ────────────────────────────────────────────────────────────────
 function NavBar({
   userName,
   onLogout,
