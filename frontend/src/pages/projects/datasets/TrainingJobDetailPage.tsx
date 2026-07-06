@@ -14,6 +14,7 @@ import DimensionPanel from './visualizer/DimensionPanel'
 import ClassificationForm from './visualizer/ClassificationForm'
 import LayersPanel from './visualizer/LayersPanel'
 import SomCanvas from '@/components/training/SomCanvas'
+import type { NeuronHit } from '@/components/training/SomCanvas/hooks/useCanvasInteraction'
 import NeuronDetail from './visualizer/NeuronDetail'
 import ClassificationResult from './visualizer/ClassificationResult'
 
@@ -42,6 +43,7 @@ export default function TrainingJobDetailPage() {
   const { data: weights } = useTrainingWeights(projectId!, datasetId!, trainingId!)
   const { data: activation } = useTrainingActivation(projectId!, datasetId!, trainingId!)
   const [activeDimensionIndex, setActiveDimensionIndex] = useState(0)
+  const [selectedNeuron, setSelectedNeuron] = useState<NeuronHit | null>(null)
 
   async function handleLogout() {
     if (refreshToken) await authApi.logout(refreshToken).catch(() => {})
@@ -113,12 +115,18 @@ export default function TrainingJobDetailPage() {
               activeDimensionIndex={activeDimensionIndex}
               gridWidth={trainingJob.gridWidth}
               gridHeight={trainingJob.gridHeight}
+              onNeuronSelect={setSelectedNeuron}
             />
           </main>
 
           {/* Right panel */}
           <aside className="order-3 w-full shrink-0 overflow-y-auto border-t bg-muted/60 lg:w-72 lg:border-l lg:border-t-0">
-            <NeuronDetail />
+            <NeuronDetail
+              selectedNeuron={selectedNeuron}
+              allWeights={weights ?? []}
+              dimensions={dimensions ?? []}
+              activeDimensionIndex={activeDimensionIndex}
+            />
             <ClassificationResult />
           </aside>
 

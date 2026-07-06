@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { Palette } from 'lucide-react'
 import HeatmapCanvas from './HeatmapCanvas'
-import { PALETTES } from './hooks/useHeatmap'
+import { PALETTES, normalizarDimension, normalizarActivacion } from './hooks/useHeatmap'
 import type { ColorStop } from './hooks/useHeatmap'
+import { calcularCentro, calcularVertices } from './hooks/useHexGrid'
+import { useCanvasInteraction } from './hooks/useCanvasInteraction'
+import type { NeuronHit } from './hooks/useCanvasInteraction'
+import { desnormalizarContinuo, desnormalizarDiscreto } from './hooks/useDenormalize'
 import type { TrainingDimension } from '@/types/trainingFiles'
+
+export type { NeuronHit }
 
 export interface SomCanvasProps {
   weights: number[][]
@@ -12,11 +18,15 @@ export interface SomCanvasProps {
   activeDimensionIndex: number
   gridWidth: number
   gridHeight: number
+  onNeuronSelect?: (neuron: NeuronHit | null) => void
 }
 
 function stopsToGradient(stops: ColorStop[]): string {
   return `linear-gradient(to right, ${stops.map((s) => s.color).join(', ')})`
 }
+
+// Bright blue visible on any heatmap background
+const SELECTION_COLOR = 'hsl(221,83%,53%)'
 
 export default function SomCanvas({
   weights,
@@ -25,7 +35,9 @@ export default function SomCanvas({
   activeDimensionIndex,
   gridWidth,
   gridHeight,
+  onNeuronSelect,
 }: SomCanvasProps) {
+  // ── Palette state ──────────────────────────────────────────────────────────
   const [activePaletteId, setActivePaletteId] = useState(PALETTES[0].id)
   const [activePalette, setActivePalette] = useState<ColorStop[]>(PALETTES[0].stops)
   const [showPicker, setShowPicker] = useState(false)
@@ -67,6 +79,97 @@ export default function SomCanvas({
     setShowPicker(false)
   }
 
+  // ── Interaction canvas ─────────────────────────────────────────────────────
+  const interactionRef = useRef<HTMLCanvasElement>(null)
+
+  const {
+    hoveredNeuron,
+    selectedNeuron,
+    tooltip,
+    size,
+    radio,
+    offsetX,
+    offsetY,
+    onMouseMove,
+    onMouseLeave,
+    onClick: onCanvasClick,
+  } = useCanvasInteraction({ canvasRef: interactionRef, gridWidth, gridHeight, onNeuronSelect })
+
+  // Draw hover and selection effects on interaction canvas
+  useEffect(() => {
+    const canvas = interactionRef.current
+    if (!canvas || size.width === 0 || radio === 0) return
+
+    const dpr = window.devicePixelRatio || 1
+    const w = Math.round(size.width * dpr)
+    const h = Math.round(size.height * dpr)
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w
+      canvas.height = h
+    }
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, size.width, size.height)
+
+    function hexPath(col: number, row: number) {
+      const { cx: rawCx, cy: rawCy } = calcularCentro(col, row, radio)
+      const verts = calcularVertices(rawCx + offsetX, rawCy + offsetY, radio)
+      ctx.beginPath()
+      ctx.moveTo(verts[0].x, verts[0].y)
+      for (let v = 1; v < 6; v++) ctx.lineTo(verts[v].x, verts[v].y)
+      ctx.closePath()
+    }
+
+    // Draw selected neuron (white halo + accent border)
+    if (selectedNeuron) {
+      hexPath(selectedNeuron.col, selectedNeuron.row)
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+      ctx.lineWidth = 3.5
+      ctx.stroke()
+      ctx.strokeStyle = SELECTION_COLOR
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
+
+    // Draw hover effect
+    if (hoveredNeuron) {
+      hexPath(hoveredNeuron.col, hoveredNeuron.row)
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'
+      ctx.fill()
+      if (hoveredNeuron.index !== selectedNeuron?.index) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+        ctx.lineWidth = 2
+        ctx.stroke()
+      }
+    }
+  }, [hoveredNeuron, selectedNeuron, size, radio, offsetX, offsetY])
+
+  // ── Normalized values for tooltip ─────────────────────────────────────────
+  const normalizedValues = useMemo(() => {
+    if (activeDimensionIndex === -1) return normalizarActivacion(activation)
+    if (weights.length === 0) return []
+    return normalizarDimension(weights, activeDimensionIndex)
+  }, [weights, activation, activeDimensionIndex])
+
+  function tooltipValue(neuronIndex: number): string {
+    if (activeDimensionIndex === -1) {
+      return `Activación: ${(activation[neuronIndex] ?? 0).toFixed(2)}`
+    }
+    const dim = dimensions[activeDimensionIndex]
+    if (!dim) return ''
+    const norm = normalizedValues[neuronIndex] ?? 0
+    if (dim.tipo_dato === 'continuo') {
+      return `${dim.nombre}: ${desnormalizarContinuo(norm, dim.min, dim.max)}`
+    }
+    const result = desnormalizarDiscreto(norm, dim)
+    if (result.secundario && result.principal.porcentaje < 95) {
+      return `${dim.nombre}: ${result.principal.etiqueta} (${result.principal.porcentaje}%)`
+    }
+    return `${dim.nombre}: ${result.principal.etiqueta}`
+  }
+
+  // ── Legend label ───────────────────────────────────────────────────────────
   const activeDimLabel =
     activeDimensionIndex === -1
       ? 'Activación de la Red'
@@ -85,17 +188,23 @@ export default function SomCanvas({
           gridHeight={gridHeight}
           palette={activePalette}
         />
-        {/* Layer 2 — interaction (future) */}
+
+        {/* Layer 2 — interaction */}
         <canvas
+          ref={interactionRef}
+          onMouseMove={onMouseMove}
+          onMouseLeave={onMouseLeave}
+          onClick={onCanvasClick}
           style={{
             position: 'absolute',
             inset: 0,
             width: '100%',
             height: '100%',
             zIndex: 2,
-            pointerEvents: 'none',
+            cursor: hoveredNeuron ? 'pointer' : 'default',
           }}
         />
+
         {/* Layer 3 — pizarra (future) */}
         <canvas
           style={{
@@ -107,6 +216,25 @@ export default function SomCanvas({
             pointerEvents: 'none',
           }}
         />
+
+        {/* Tooltip */}
+        {tooltip && hoveredNeuron && (
+          <div
+            style={{
+              position: 'absolute',
+              left: Math.min(tooltip.x + 14, size.width - 190),
+              top: Math.max(8, tooltip.y - 48),
+              zIndex: 20,
+              pointerEvents: 'none',
+            }}
+            className="rounded-md border bg-background/95 px-2.5 py-1.5 text-xs shadow-md backdrop-blur-sm"
+          >
+            <p className="font-semibold text-foreground">
+              Fila {hoveredNeuron.row + 1}, Col {hoveredNeuron.col + 1}
+            </p>
+            <p className="mt-0.5 text-muted-foreground">{tooltipValue(hoveredNeuron.index)}</p>
+          </div>
+        )}
 
         {/* Palette button — floating top-right */}
         <button
