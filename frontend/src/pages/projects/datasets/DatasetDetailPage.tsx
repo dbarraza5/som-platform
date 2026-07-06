@@ -14,9 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import AppLayout from '@/components/layout/AppLayout'
 import DatasetHeader from './components/DatasetHeader'
-import DatasetStatusCard from './components/DatasetStatusCard'
 import DatasetPipeline from './components/DatasetPipeline'
-import DatasetInfoCard from './components/DatasetInfoCard'
 import DatasetTrainingCard from './components/DatasetTrainingCard'
 import TrainingJobMonitorCard from './components/TrainingJobMonitorCard'
 import TrainingJobCatalogSection from './components/TrainingJobCatalogSection'
@@ -68,9 +66,8 @@ export default function DatasetDetailPage() {
     enabled: !!projectId && !!datasetId,
   })
 
-  // The monitor card above already shows the most recent TrainingJob (any
-  // status) — the catalog only lists the rest, so the same job never
-  // appears twice on the page.
+  // The monitor card above already shows the most recent TrainingJob (any status).
+  // The catalog only lists the rest, so the same job never appears twice on the page.
   const catalogTrainingJobs = (allTrainingJobs ?? []).filter((job) => job.id !== latestTrainingJob?.id)
 
   const uploadMutation = useMutation({
@@ -142,11 +139,12 @@ export default function DatasetDetailPage() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <DatasetHeader dataset={dataset} projectId={projectId!} />
+      <div className="space-y-10">
 
-        <DatasetStatusCard
+        {/* ── 1. Información del Dataset ─────────────────────────── */}
+        <DatasetHeader
           dataset={dataset}
+          projectId={projectId!}
           upload={{
             fileInputRef,
             selectedFile,
@@ -161,23 +159,43 @@ export default function DatasetDetailPage() {
           }}
         />
 
-        <DatasetPipeline dataset={dataset} />
+        {/* ── 2. Procesamiento del Dataset (automático) ──────────── */}
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Procesamiento del Dataset</h2>
+            <p className="text-sm text-muted-foreground">
+              El sistema procesa el archivo CSV de forma automática.
+            </p>
+          </div>
+          <DatasetPipeline dataset={dataset} />
+        </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <DatasetInfoCard dataset={dataset} />
+        {/* ── 3. Entrenamiento SOM (iniciado por el usuario) ─────── */}
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold">Entrenamiento SOM</h2>
+            <p className="text-sm text-muted-foreground">
+              Los entrenamientos son creados y configurados manualmente.
+            </p>
+          </div>
           {latestTrainingJob ? (
-            <TrainingJobMonitorCard trainingJob={latestTrainingJob} onCreateNew={handleCreateTraining} />
+            <TrainingJobMonitorCard
+              trainingJob={latestTrainingJob}
+              onCreateNew={handleCreateTraining}
+            />
           ) : (
             <DatasetTrainingCard dataset={dataset} onCreateTraining={handleCreateTraining} />
           )}
-        </div>
+        </section>
 
+        {/* ── 4. Catálogo de entrenamientos ──────────────────────── */}
         <TrainingJobCatalogSection
           trainingJobs={catalogTrainingJobs}
           projectId={projectId!}
           datasetId={datasetId!}
           isLoading={isLoadingTrainingJobs}
         />
+
       </div>
 
       <Dialog open={showTrainingModal} onOpenChange={setShowTrainingModal}>

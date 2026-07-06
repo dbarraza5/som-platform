@@ -6,136 +6,112 @@ React + Vite + TypeScript, styled with Tailwind CSS and hand-written shadcn/ui c
 
 Route: `/projects/:id/datasets/:datasetId` — `src/pages/projects/datasets/DatasetDetailPage.tsx`.
 
-This is the main panel for a single Dataset: it shows what's happening to the CSV the user uploaded, from upload through normalization, and is where "Crear entrenamiento" opens the SOM training configuration modal (see [Creating a training job](#creating-a-training-job) below).
+The Dataset detail view represents the full lifecycle of a Dataset in the platform. The screen is organized into clearly separated sections so users can instantly understand where the Dataset is in its lifecycle, what automatic processing has occurred, and what training actions they can take.
 
-### Component organization
+### Screen structure (Phase 10.7.4)
 
-`DatasetDetailPage` is an orchestrator only — it owns the query, the upload mutation, and the training-modal open state, and hands data down to presentational components in `src/pages/projects/datasets/components/`:
+The page is divided into four sections in order:
 
-| Component | Responsibility |
-|---|---|
-| `DatasetHeader` | Back link, name/description, edit button, and a compact summary row (filename, size, uploaded date, last updated). |
-| `DatasetStatusCard` | The primary status card: badge, icon, friendly description, error message. Also hosts the CSV upload control when no file has been uploaded yet. |
-| `DatasetPipeline` | The 4-step stepper (CSV recibido → Trabajo encolado → Normalización → Entrenamiento). |
-| `DatasetInfoCard` | Structured dataset facts (filename, size, status, upload date, normalization finish date, error) with friendly placeholders for anything not yet available. |
-| `DatasetTrainingCard` | "No existen entrenamientos" placeholder + the "Crear entrenamiento" button, enabled only once normalization is `COMPLETED`. Clicking it opens the training configuration modal. |
-| `DatasetDetailSkeleton` | Loading placeholder shaped like the real layout (shadcn `Skeleton`), shown instead of a blank page while the dataset query is in flight. |
+| # | Section | Content |
+|---|---|---|
+| 1 | **Información del Dataset** | `DatasetHeader` — name, description, key stats (records, columns, file size, created, uploaded, status badge), CSV upload area when needed. |
+| 2 | **Procesamiento del Dataset** | `DatasetPipeline` — the 4-step stepper showing how far automatic processing has gone. Labeled as automatic so users know they don't trigger it. |
+| 3 | **Entrenamiento SOM** | `TrainingJobMonitorCard` (when a training exists) or `DatasetTrainingCard` CTA (when none). Labeled as manual so users know they initiate this. |
+| 4 | **Catálogo** | `TrainingJobCatalogSection` — all previous trainings. |
 
-Shared logic lives in `src/lib/datasetStatus.ts`, not inside any component — every card reads from the same source of truth.
+The two-label design — *"El sistema procesa el archivo CSV de forma automática"* vs. *"Los entrenamientos son creados y configurados manualmente"* — makes explicit that normalization is automatic and training is user-initiated. This removes the ambiguity that existed in earlier layouts where processing steps and training appeared as peers.
+
+### Component responsibilities
+
+`DatasetDetailPage` is an orchestrator only — it owns all queries, mutations, and modal state, and passes data down as props:
+
+| Component | File | Responsibility |
+|---|---|---|
+| `DatasetHeader` | `components/DatasetHeader.tsx` | Name, description, stats row (records, columns, size, dates, status badge), upload area. Absorbs the old `DatasetStatusCard` and `DatasetInfoCard`. Exports `UploadState` type. |
+| `DatasetPipeline` | `components/DatasetPipeline.tsx` | 4-step stepper: CSV recibido → Trabajo encolado → Normalización → Dataset listo. Each step reflects the derived pipeline status. |
+| `DatasetTrainingCard` | `components/DatasetTrainingCard.tsx` | Prominent CTA shown when no training exists. "Nuevo entrenamiento SOM" button, enabled only when `COMPLETED`. |
+| `TrainingJobMonitorCard` | `components/TrainingJobMonitorCard.tsx` | Live status of the most recent training. Polls while active. Shows "Crear nuevo entrenamiento" for both `COMPLETED` and `FAILED` states. |
+| `TrainingJobCatalogSection` | `components/TrainingJobCatalogSection.tsx` | All other trainings (newest first), each row a `TrainingJobListItem`. Empty-state message when none. |
+| `DatasetDetailSkeleton` | `components/DatasetDetailSkeleton.tsx` | Loading skeleton matching the four-section layout. |
+
+Shared status logic lives in `src/lib/datasetStatus.ts` — no component derives status on its own.
 
 ### Dataset states
 
-The backend exposes two independent enums, `analysisStatus` and `normalizationStatus` (each `PENDING | PROCESSING | COMPLETED | FAILED`), because CSV analysis runs synchronously on upload and normalization runs asynchronously in the Worker afterwards. The UI needs one status to drive a single badge and stepper, so `getDatasetPipelineStatus(dataset)` in `datasetStatus.ts` derives it:
+The Backend exposes two independent enums (`analysisStatus`, `normalizationStatus`). `getDatasetPipelineStatus(dataset)` in `datasetStatus.ts` maps these to a single derived status:
 
-- **`NO_FILE`** — `originalFilename` is still `null`. Not one of the five states the design calls out explicitly, but a real precondition: a Dataset can exist before any CSV is attached, and this is the only screen that can upload one. Shown with an upload prompt instead of the pipeline.
-- **`UPLOADED`** — file received, analysis not yet confirmed `COMPLETED`.
-- **`QUEUED`** — analysis succeeded and the normalization job was published to the queue (`normalizationStatus: PENDING`).
-- **`PROCESSING`** — the Worker is actively normalizing (`normalizationStatus: PROCESSING`).
-- **`COMPLETED`** — normalization finished successfully; training can start.
-- **`FAILED`** — either `analysisStatus` or `normalizationStatus` is `FAILED`. The pipeline step that failed is highlighted red so the user sees exactly where the process stopped, instead of just a generic error.
+- **`NO_FILE`** — no CSV uploaded yet. `DatasetHeader` shows the upload area.
+- **`UPLOADED`** — file received, analysis not yet confirmed.
+- **`QUEUED`** — analysis done, normalization job queued.
+- **`PROCESSING`** — Worker actively normalizing.
+- **`COMPLETED`** — normalization done; training can begin.
+- **`FAILED`** — analysis or normalization failed. `DatasetHeader` shows the upload area again so the user can retry with a corrected file.
 
-Each status has a label, description, icon (lucide-react) and color classes defined once in `DATASET_STATUS_META`, reused by both `DatasetStatusCard` and `DatasetInfoCard` so the badge always looks the same wherever it appears.
+Each status has `label`, `description`, `icon`, `badgeClassName`, and `iconWrapperClassName` in `DATASET_STATUS_META`, used consistently by every component that renders a status badge.
+
+### Pipeline steps
+
+`getDatasetPipelineSteps(dataset)` drives the `DatasetPipeline` stepper. Steps:
+
+| Key | Label | `done` when |
+|---|---|---|
+| `received` | CSV recibido | `QUEUED`, `PROCESSING`, `COMPLETED` |
+| `queued` | Trabajo encolado | `PROCESSING`, `COMPLETED` |
+| `normalized` | Normalización | `COMPLETED` |
+| `ready` | Dataset listo | `COMPLETED` |
+
+When `COMPLETED`, all four steps show green (`done`). The fourth step is named "Dataset listo" rather than "Entrenamiento" to clarify that training is not part of the automatic pipeline.
 
 ### Automatic polling
 
-While the derived status is `UPLOADED`, `QUEUED`, or `PROCESSING`, `DatasetDetailPage`'s `useQuery` sets `refetchInterval: 5000` (via a function that re-derives the status from the latest cached data on every tick). Once the status reaches `COMPLETED` or `FAILED`, the same function returns `false` and polling stops — no interval is left running in the background, and no extra requests happen for a Dataset that isn't actively being processed (including `NO_FILE`, which never polls since nothing changes without a user action).
+While `UPLOADED`, `QUEUED`, or `PROCESSING`, the Dataset query polls every 5 s. A parallel query polls the latest `TrainingJob` every 5 s while active. Both use `refetchInterval` with a function that re-derives the status — polling stops automatically on terminal state. No background intervals run for datasets or trainings that aren't actively changing.
 
-### UX decisions
+### Upload control
 
-- **Upload stays on this page.** There's no separate "upload" route — `NewDatasetPage` only creates the name/description. Removing the file picker from this screen would leave freshly created Datasets with no way to attach a CSV, so it lives inside `DatasetStatusCard`, shown only in the `NO_FILE` state.
-- **Status colors follow the existing convention**, not new design tokens: blue/amber/green/red Tailwind classes, the same pattern already used by `DatasetListItem` on the project page. No new CSS variables were introduced.
-- **Cards over tables.** Per the design brief, all dataset facts are laid out as label/value pairs inside Cards rather than an HTML table, consistent with the rest of the app (Dashboard, Project detail).
-- **Placeholders instead of blanks.** Any field that isn't available yet (file size before upload, normalization finish date before completion) renders an italic, muted placeholder string rather than an empty cell.
+The CSV upload area lives in `DatasetHeader` and appears only when `status === 'NO_FILE'` or `status === 'FAILED'`. There is no separate upload route — `NewDatasetPage` only creates the name/description, and a freshly created Dataset has no CSV until the user uploads one here.
 
 ## Creating a training job
 
-Clicking "Crear entrenamiento" on a Dataset whose pipeline status is `COMPLETED` opens a modal (`DatasetDetailPage.tsx`) containing `CreateTrainingJobForm` (`src/components/training-jobs/CreateTrainingJobForm.tsx`). This phase (10.7.1) only covers *configuring and creating* a `TrainingJob` — no progress bar, live status, history list, recovery UI, or model visualization exists yet (the Dataset detail page still shows a static "No existen entrenamientos" card afterwards; only a transient success banner confirms the creation).
+"Nuevo entrenamiento SOM" (on `DatasetTrainingCard`) or "Crear nuevo entrenamiento" (on `TrainingJobMonitorCard`) opens a `Dialog` in `DatasetDetailPage` containing `CreateTrainingJobForm` (`src/components/training-jobs/CreateTrainingJobForm.tsx`).
 
-### What the form shows
+The form shows a dataset summary, a topology selector (20×20 to 80×80, live neuron count), Alpha/Omega inputs (defaulted to the `som_` executable's own defaults: `0.5` / `0.005`), and a confirmation summary. On submit it calls `POST /projects/:projectId/datasets/:datasetId/training-jobs` — no Backend changes for this form.
 
-- **Dataset summary** — name, "Entradas" (`dataset.columns`, the column count computed by the CSV analyzer before normalization — used as the best available proxy for the SOM's input dimension, since the platform doesn't yet expose a post-normalization recount to the frontend) and the same status badge used elsewhere (`DATASET_STATUS_META`).
-- **Topología** — a `<select>` (`src/components/ui/select.tsx`, a native element styled like `Input` rather than a new Radix dependency) restricted to the recommended square grid sizes in `src/lib/somDefaults.ts`: 20×20, 30×30, 40×40 (default), 50×50, 60×60, 80×80. Width/height are never freely typed.
-- **Neuronas** — read-only, computed as `width × height` and recalculated live whenever the topology changes.
-- **Alpha / Omega** — the only two editable SOM parameters, defaulted to `0.5` / `0.005` (the `som_` executable's own built-in defaults, confirmed during Phase 9's static analysis). Both must be greater than 0.
-- **Resumen** — a pre-confirmation recap of Dataset, Topología, Neuronas, Entradas, Alpha and Omega.
-
-### What gets sent to the Backend
-
-`DatasetDetailPage` maps the form values to the existing `POST /projects/:projectId/datasets/:datasetId/training-jobs` contract (`src/api/trainingJobs.ts`) — no Backend change was made for this phase:
+Backend field mapping:
 
 | Backend field | Source |
 |---|---|
-| `name` | Auto-generated on the frontend (`Entrenamiento <dataset.name> — <fecha/hora>`) — the form has no name input. |
-| `gridWidth`, `gridHeight` | From the selected topology. |
-| `alpha` | The form's Alpha field. |
-| `beta` | The form's "Omega" field (the Backend/`som_` name for this parameter is `beta`; the UI uses "Omega" per the design brief). |
-| `neighborhoodRadius`, `objectiveDimensionWeight` | Fixed at `som_`'s own defaults (`4` and `0`, `src/lib/somDefaults.ts`) — not exposed in this phase's form. |
-| `description`, `iterationLimit`, `useLogarithmicForget`, `threadCount` | Omitted, so the Backend's own defaults apply. |
+| `name` | Auto-generated: `Entrenamiento <dataset.name> — <fecha/hora>` |
+| `gridWidth`, `gridHeight` | From topology selection |
+| `alpha` | Form Alpha field |
+| `beta` | Form Omega field (Backend/`som_` calls it `beta`) |
+| `neighborhoodRadius`, `objectiveDimensionWeight` | Fixed at `som_` defaults (`4` and `0`) |
 
-### Validation
-
-- The trigger button and every field in the form are disabled unless `getDatasetPipelineStatus(dataset) === 'COMPLETED'` — checked both on the card (as before) and again inside the form itself, in case the Dataset's status changes while the modal is open.
-- Alpha and Omega are validated with Zod (`> 0`) via `react-hook-form` + `zodResolver`, matching every other form in this codebase.
+On success the mutation invalidates both `['trainingJob', 'latest', datasetId]` and `['trainingJobs', datasetId]`, so the monitor card and catalog both refresh immediately.
 
 ## Monitoring a training job (Phase 10.7.2)
 
-Once a Dataset has a `TrainingJob` at all — in any status — `DatasetDetailPage` renders `TrainingJobMonitorCard` (`src/pages/projects/datasets/components/TrainingJobMonitorCard.tsx`) in place of `DatasetTrainingCard`. Only the most recent `TrainingJob` for the Dataset is tracked; there is still no history list or comparison between runs (that remains a later phase, as does model visualization and result downloads).
+Once a `TrainingJob` exists for a Dataset, `TrainingJobMonitorCard` replaces `DatasetTrainingCard` in the "Entrenamiento SOM" section.
 
-This required one minimal, explicitly-scoped Backend addition: `GET /projects/:projectId/datasets/:datasetId/training-jobs/latest` (JWT-authenticated, same ownership check as dataset access). Every other endpoint under `/training-jobs` was already internal-only (Worker-to-Backend), so the Frontend had no way to read a `TrainingJob`'s current state at all before this — the route only exposes data the Backend already stores, it changes no existing behavior.
-
-### Possible training statuses
-
-The Backend only has five real statuses (`QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, `CANCELLED`). `getTrainingDisplayStatus()` (`src/lib/trainingJobStatus.ts`) derives two additional UI-only distinctions from fields already on `TrainingJob`, so the card can be more specific than the raw enum without inventing new Backend states:
+`getTrainingDisplayStatus()` (`src/lib/trainingJobStatus.ts`) maps Backend statuses to seven display states:
 
 | Displayed as | Derived from |
 |---|---|
-| **En cola** | `status === 'QUEUED'` — the Worker hasn't picked up the job yet. |
-| **Iniciando** | `status === 'RUNNING'` but `currentIteration`/`currentCycle` are still `null` — the Worker launched `som_` but hasn't completed its first `statusRNA.dat` poll yet (the same gap Phase 10.3 vs. 10.4 introduced). |
-| **Recuperando entrenamiento...** | `status === 'RUNNING'` and `recoveryAttempts > 0` — the Worker resumed this run after a restart (Phase 10.5). Since there is no separate "recovery in progress right now" signal, this label is shown for the rest of the run, not just a brief instant — a known simplification. |
-| **Entrenando** | `status === 'RUNNING'` with iteration/cycle data and no recovery attempts. |
-| **Entrenamiento completado** | `status === 'COMPLETED'`. |
-| **Entrenamiento fallido** | `status === 'FAILED'`. Shows the Backend's `errorMessage` when present, and a "Crear nuevo entrenamiento" button to start over. |
-| **Entrenamiento cancelado** | `status === 'CANCELLED'` — handled defensively; nothing in the current system creates this status yet. |
+| **En cola** | `status === 'QUEUED'` |
+| **Iniciando** | `status === 'RUNNING'`, no iteration/cycle data yet |
+| **Recuperando entrenamiento...** | `status === 'RUNNING'` and `recoveryAttempts > 0` |
+| **Entrenando** | `status === 'RUNNING'` with iteration/cycle data |
+| **Entrenamiento completado** | `status === 'COMPLETED'` |
+| **Entrenamiento fallido** | `status === 'FAILED'` |
+| **Entrenamiento cancelado** | `status === 'CANCELLED'` |
 
-### Automatic polling
-
-`DatasetDetailPage` runs a second `useQuery` (`['trainingJob', 'latest', datasetId]`) alongside the existing Dataset query, with the same `refetchInterval` pattern: `isTrainingDisplayStatusActive(status)` returns `false` for `COMPLETED`/`FAILED`/`CANCELLED`, so polling (every 5s, the same `POLL_INTERVAL_MS` used for Dataset polling) stops automatically the moment the job reaches a terminal state — no interval keeps running for a finished job, and no manual refresh is ever required while one is active. Creating a job invalidates this query immediately, so the monitor card replaces the "Crear entrenamiento" button as soon as the request succeeds, without waiting for the next poll tick. Leaving and returning to the page re-fetches on mount, so the card always reflects the Backend's current state rather than stale client state.
-
-### Progress bar and elapsed time
-
-The progress bar (`src/components/ui/progress.tsx`, a plain styled `<div>` rather than a new Radix dependency — same reasoning as `ui/select.tsx`) always renders the Backend's own `progress` percentage; the Frontend never computes it. It — along with "Iteración actual" / "Ciclo actual" — is hidden once the status is terminal (`COMPLETED`/`FAILED`/`CANCELLED`), per the design brief. "Iteración actual" and "Ciclo actual" show "No disponible" instead of blank/`null` whenever the Worker hasn't reported them yet.
-
-"Tiempo transcurrido" (while active) and "Duración total" (once finished) are both computed client-side from the Backend's own `startedAt`/`finishedAt` timestamps (`formatDuration` in `trainingJobStatus.ts`) — this is just formatting a difference between two Backend-supplied dates, not deriving progress. Before `startedAt` exists (`QUEUED`), this shows "No disponible" instead of a misleading `0s`.
-
-### Completion and failure
-
-On `COMPLETED`, the card hides the progress bar, shows "Entrenamiento completado" plus a green confirmation line with the finish date — nothing about the trained model itself (no weights, no visualization) is shown yet, per this phase's scope. On `FAILED`, the card shows "Entrenamiento fallido", the Backend's `errorMessage` if one was reported, and a "Crear nuevo entrenamiento" button that reopens the same configuration modal from Phase 10.7.1 (there is deliberately no such button after `COMPLETED` — the phase brief only calls for allowing a retry after a failure).
+The card shows a "Crear nuevo entrenamiento" button for both `COMPLETED` and `FAILED` states. The progress bar is the Backend's own `progress` field (computed in the Worker as `ciclos / total_cycles * 100` where `total_cycles = alpha / beta`).
 
 ## Training catalog and detail page (Phase 10.7.3)
 
-A Dataset can have many `TrainingJob`s — Phase 10.7.2 only ever showed the most recent one. This phase adds a full catalog below it, and a dedicated page to act as the future home for each run's results.
+`TrainingJobCatalogSection` renders the full list of `TrainingJob`s for the Dataset (all except the most recent one, which the monitor card already shows). The filter is `allTrainingJobs.filter(job => job.id !== latestTrainingJob?.id)`, so no job ever appears twice. Each row uses `TrainingJobListItem` and links to the training detail page.
 
-Two more minimal, JWT-authenticated Backend endpoints were added under the same `/projects/:projectId/datasets/:datasetId/training-jobs` router (same ownership-check pattern as `/latest`, no other Backend/Worker logic touched):
+Two Backend endpoints (same JWT + ownership pattern as `/latest`):
+- `GET /training-jobs` — all trainings, newest first
+- `GET /training-jobs/:id` — one training, 404 if not in this Dataset
 
-| Endpoint | Used for |
-|---|---|
-| `GET /training-jobs` | The catalog — every `TrainingJob` for the Dataset, newest first (`ORDER BY createdAt DESC`). |
-| `GET /training-jobs/:id` | The training detail page — a single `TrainingJob`, 404 if it doesn't belong to this Dataset. |
-
-### Dataset ↔ TrainingJob relationship
-
-Unchanged from the domain model in the root `CLAUDE.md`: a `Dataset` has many `TrainingJob`s, each one an independent SOM run with its own topology/parameters/results. Nothing before this phase let a user see more than the single latest one — `DatasetDetailPage` now fetches the full list (`['trainingJobs', datasetId]`, no polling — it only needs to refetch when a new job is created, which the create mutation already invalidates alongside `['trainingJob', 'latest', datasetId]`) and treats it as the catalog data source.
-
-### Catalog section
-
-`TrainingJobCatalogSection` (`src/pages/projects/datasets/components/TrainingJobCatalogSection.tsx`) renders below the Dataset info / monitor card grid, titled "Entrenamientos anteriores". It follows the same `Card` + `divide-y` list pattern already used for Datasets inside `ProjectDetailPage` and Projects inside `DashboardPage` — a `TrainingJobListItem` (`src/components/training-jobs/TrainingJobListItem.tsx`) per row, reusing `TRAINING_STATUS_META` for the status badge/icon so it looks identical to the monitor card's own status treatment. Each row shows status, start/finish dates, duration, topology, neuron count, Alpha and Omega, and a "Ver detalle" button.
-
-**Never duplicated with the current training**: the monitor card already displays the most recent `TrainingJob` regardless of status (Phase 10.7.2's behavior, unchanged). The catalog is that same full list with the current one filtered out client-side (`catalogTrainingJobs = allTrainingJobs.filter(job => job.id !== latestTrainingJob?.id)`), so a job is always shown in exactly one place on the page. If a Dataset has zero `TrainingJob`s at all, the catalog shows its own empty-state message rather than being hidden — it is not conditional on the monitor card existing.
-
-### Navigation to the detail page
-
-Each catalog row's "Ver detalle" links to `/projects/:id/datasets/:datasetId/trainings/:trainingId` (added to `src/router/index.tsx`, `RequireAuth`-guarded like every other page). `TrainingJobDetailPage` (`src/pages/projects/datasets/TrainingJobDetailPage.tsx`) fetches that one `TrainingJob` and shows the same status header plus a fuller info grid (topology, neurons, Alpha, Omega, final iteration/cycle, start/finish dates, error message if failed) than the compact catalog row.
-
-### Preparation for future phases
-
-Below the info card, the page renders a second Card with a placeholder: "Visualización disponible en la siguiente iteración." This is deliberately the *only* thing missing — the page already fetches and displays the real `TrainingJob` (not a static mock), so a future phase only needs to add the SOM map, trained weights, neuron activation, and generated-files views into this same page; no new routing, data-fetching, or ownership-check work will be needed then. Explicitly not built yet, per this phase's scope: model visualization, comparing runs, deleting/editing a `TrainingJob`, and downloading result files.
+`TrainingJobDetailPage` (`src/pages/projects/datasets/TrainingJobDetailPage.tsx`) shows real training data (topology, neurons, Alpha, Omega, final iteration/cycle, dates) with a placeholder for the future SOM visualization.

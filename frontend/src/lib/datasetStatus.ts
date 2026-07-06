@@ -98,7 +98,7 @@ export function getDatasetPipelineSteps(dataset: Dataset): PipelineStep[] {
     { key: 'received', label: 'CSV recibido', state: 'pending' },
     { key: 'queued', label: 'Trabajo encolado', state: 'pending' },
     { key: 'normalized', label: 'Normalización', state: 'pending' },
-    { key: 'training', label: 'Entrenamiento', state: 'pending' },
+    { key: 'ready', label: 'Dataset listo', state: 'pending' },
   ]
 
   switch (status) {
@@ -120,7 +120,7 @@ export function getDatasetPipelineSteps(dataset: Dataset): PipelineStep[] {
       steps[0].state = 'done'
       steps[1].state = 'done'
       steps[2].state = 'done'
-      steps[3].state = 'current'
+      steps[3].state = 'done'
       return steps
     case 'FAILED':
       if (dataset.analysisStatus === 'FAILED') {

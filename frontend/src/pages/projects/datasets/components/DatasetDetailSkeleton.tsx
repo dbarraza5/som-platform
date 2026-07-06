@@ -3,70 +3,60 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DatasetDetailSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-7 w-64" />
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-8 w-36" />
+          <Skeleton className="h-8 w-20" />
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border p-4 sm:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton className="h-7 w-56" />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border p-4 sm:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="space-y-1.5">
-              <Skeleton className="h-3 w-16" />
-              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-14" />
+              <Skeleton className="h-4 w-20" />
             </div>
           ))}
         </div>
       </div>
 
-      {/* Status card */}
-      <Card>
-        <CardHeader>
+      {/* Processing section */}
+      <div className="space-y-4">
+        <div className="space-y-1">
           <Skeleton className="h-5 w-48" />
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-start gap-4">
-            <Skeleton className="h-11 w-11 shrink-0 rounded-full" />
-            <div className="w-full max-w-sm space-y-2">
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-3 w-72" />
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex flex-1 flex-col items-center gap-2">
+                  <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              ))}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Pipeline */}
-      <Card>
-        <CardHeader>
+      {/* Training section */}
+      <div className="space-y-4">
+        <div className="space-y-1">
           <Skeleton className="h-5 w-40" />
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-start gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex flex-1 flex-col items-center gap-2">
-                <Skeleton className="h-10 w-10 shrink-0 rounded-full" />
-                <Skeleton className="h-3 w-16" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Info + Training */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {[0, 1].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-5 w-40" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-              <Skeleton className="h-4 w-1/2" />
-            </CardContent>
-          </Card>
-        ))}
+          <Skeleton className="h-3 w-80" />
+        </div>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-32" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
