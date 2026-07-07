@@ -4,24 +4,27 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import type { TrainingDimension } from '@/types/trainingFiles'
+import { normalizarContinuo, normalizarDiscreto } from '@/components/training/SomCanvas/hooks/useDenormalize'
 
 interface ClassificationFormProps {
   dimensions: TrainingDimension[]
+  onClassify: (inputNorm: number[]) => void
+  onClear: () => void
 }
 
-export default function ClassificationForm({ dimensions }: ClassificationFormProps) {
+export default function ClassificationForm({ dimensions, onClassify, onClear }: ClassificationFormProps) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   function setValue(nombre: string, value: string) {
     setValues((prev) => ({ ...prev, [nombre]: value }))
-    // Clear the error for this field as the user types
     if (errors[nombre]) setErrors((prev) => { const next = { ...prev }; delete next[nombre]; return next })
   }
 
   function handleClear() {
     setValues({})
     setErrors({})
+    onClear()
   }
 
   function handleClasificar() {
@@ -47,7 +50,17 @@ export default function ClassificationForm({ dimensions }: ClassificationFormPro
     }
 
     setErrors(newErrors)
-    // Classification logic goes here in a future phase
+    if (Object.keys(newErrors).length > 0) return
+
+    const inputNorm = dimensions.map((dim) => {
+      const raw = values[dim.nombre]
+      if (dim.tipo_dato === 'continuo') {
+        return normalizarContinuo(parseFloat(raw), dim.min, dim.max)
+      }
+      return normalizarDiscreto(raw, dim)
+    })
+
+    onClassify(inputNorm)
   }
 
   return (

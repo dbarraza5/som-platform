@@ -1,5 +1,16 @@
 import type { TrainingDimension } from '@/types/trainingFiles'
 
+export function normalizarContinuo(valor: number, min: number, max: number): number {
+  if (max === min) return 0
+  return Math.max(0, Math.min(1, (valor - min) / (max - min)))
+}
+
+export function normalizarDiscreto(etiqueta: string, dimension: TrainingDimension): number {
+  const idx = (dimension.rango?.indexOf(etiqueta) ?? -1) + 1
+  if (dimension.max === dimension.min) return 0
+  return Math.max(0, Math.min(1, (idx - dimension.min) / (dimension.max - dimension.min)))
+}
+
 export function desnormalizarContinuo(valorNorm: number, min: number, max: number): number {
   return Math.round((valorNorm * (max - min) + min) * 100) / 100
 }

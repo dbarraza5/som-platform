@@ -18,7 +18,9 @@ export interface SomCanvasProps {
   activeDimensionIndex: number
   gridWidth: number
   gridHeight: number
+  winnerNeuron?: NeuronHit | null
   onNeuronSelect?: (neuron: NeuronHit | null) => void
+  onPaletteChange?: (palette: ColorStop[]) => void
 }
 
 function stopsToGradient(stops: ColorStop[]): string {
@@ -35,7 +37,9 @@ export default function SomCanvas({
   activeDimensionIndex,
   gridWidth,
   gridHeight,
+  winnerNeuron,
   onNeuronSelect,
+  onPaletteChange,
 }: SomCanvasProps) {
   // ── Palette state ──────────────────────────────────────────────────────────
   const [activePaletteId, setActivePaletteId] = useState(PALETTES[0].id)
@@ -77,6 +81,7 @@ export default function SomCanvas({
     setActivePalette(stops)
     setActivePaletteId(id)
     setShowPicker(false)
+    onPaletteChange?.(stops)
   }
 
   // ── Interaction canvas ─────────────────────────────────────────────────────
@@ -95,7 +100,7 @@ export default function SomCanvas({
     onClick: onCanvasClick,
   } = useCanvasInteraction({ canvasRef: interactionRef, gridWidth, gridHeight, onNeuronSelect })
 
-  // Draw hover and selection effects on interaction canvas
+  // Draw winner, hover, and selection on interaction canvas
   useEffect(() => {
     const canvas = interactionRef.current
     if (!canvas || size.width === 0 || radio === 0) return
@@ -121,7 +126,17 @@ export default function SomCanvas({
       ctx.closePath()
     }
 
-    // Draw selected neuron (white halo + accent border)
+    // 1. Draw winner: accent fill + accent border
+    if (winnerNeuron) {
+      hexPath(winnerNeuron.col, winnerNeuron.row)
+      ctx.fillStyle = 'hsla(221,83%,53%,0.4)'
+      ctx.fill()
+      ctx.strokeStyle = SELECTION_COLOR
+      ctx.lineWidth = 3
+      ctx.stroke()
+    }
+
+    // 2. Draw selected: white halo + accent border (on top of winner if same neuron)
     if (selectedNeuron) {
       hexPath(selectedNeuron.col, selectedNeuron.row)
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'
@@ -132,7 +147,7 @@ export default function SomCanvas({
       ctx.stroke()
     }
 
-    // Draw hover effect
+    // 3. Draw hover: white fill + white border (unless hovering selected)
     if (hoveredNeuron) {
       hexPath(hoveredNeuron.col, hoveredNeuron.row)
       ctx.fillStyle = 'rgba(255,255,255,0.25)'
@@ -143,7 +158,25 @@ export default function SomCanvas({
         ctx.stroke()
       }
     }
-  }, [hoveredNeuron, selectedNeuron, size, radio, offsetX, offsetY])
+
+    // 4. Draw winner center dot (always on top so it's visible over hover/selection)
+    if (winnerNeuron) {
+      const { cx: rawCx, cy: rawCy } = calcularCentro(winnerNeuron.col, winnerNeuron.row, radio)
+      const cx = rawCx + offsetX
+      const cy = rawCy + offsetY
+      const dotRadius = Math.max(3, radio * 0.2)
+
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.beginPath()
+      ctx.arc(cx, cy, dotRadius + 1.5, 0, Math.PI * 2)
+      ctx.fill()
+
+      ctx.fillStyle = SELECTION_COLOR
+      ctx.beginPath()
+      ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }, [hoveredNeuron, selectedNeuron, winnerNeuron, size, radio, offsetX, offsetY])
 
   // ── Normalized values for tooltip ─────────────────────────────────────────
   const normalizedValues = useMemo(() => {

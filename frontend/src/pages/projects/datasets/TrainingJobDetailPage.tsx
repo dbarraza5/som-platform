@@ -17,6 +17,10 @@ import SomCanvas from '@/components/training/SomCanvas'
 import type { NeuronHit } from '@/components/training/SomCanvas/hooks/useCanvasInteraction'
 import NeuronDetail from './visualizer/NeuronDetail'
 import ClassificationResult from './visualizer/ClassificationResult'
+import { PALETTES } from '@/components/training/SomCanvas/hooks/useHeatmap'
+import type { ColorStop } from '@/components/training/SomCanvas/hooks/useHeatmap'
+import { useClassification } from '@/components/training/SomCanvas/hooks/useClassification'
+import type { ClassificationMatch } from '@/components/training/SomCanvas/hooks/useClassification'
 
 export default function TrainingJobDetailPage() {
   const { id: projectId, datasetId, trainingId } = useParams<{
@@ -42,8 +46,29 @@ export default function TrainingJobDetailPage() {
 
   const { data: weights } = useTrainingWeights(projectId!, datasetId!, trainingId!)
   const { data: activation } = useTrainingActivation(projectId!, datasetId!, trainingId!)
+
   const [activeDimensionIndex, setActiveDimensionIndex] = useState(0)
   const [selectedNeuron, setSelectedNeuron] = useState<NeuronHit | null>(null)
+  const [winnerNeuron, setWinnerNeuron] = useState<NeuronHit | null>(null)
+  const [classificationResult, setClassificationResult] = useState<ClassificationMatch | null>(null)
+  const [currentPalette, setCurrentPalette] = useState<ColorStop[]>(PALETTES[0].stops)
+
+  const { clasificar } = useClassification({
+    weights: weights ?? [],
+    gridWidth: trainingJob?.gridWidth ?? 1,
+  })
+
+  function handleClassify(inputNorm: number[]) {
+    const result = clasificar(inputNorm)
+    if (!result) return
+    setClassificationResult(result)
+    setWinnerNeuron({ index: result.indice, col: result.columna, row: result.fila })
+  }
+
+  function handleClear() {
+    setClassificationResult(null)
+    setWinnerNeuron(null)
+  }
 
   async function handleLogout() {
     if (refreshToken) await authApi.logout(refreshToken).catch(() => {})
@@ -103,6 +128,8 @@ export default function TrainingJobDetailPage() {
               dimsNotFound={dimsNotFound}
               dimensions={dimensions}
               onSelectionChange={setActiveDimensionIndex}
+              onClassify={handleClassify}
+              onClear={handleClear}
             />
           </aside>
 
@@ -115,7 +142,9 @@ export default function TrainingJobDetailPage() {
               activeDimensionIndex={activeDimensionIndex}
               gridWidth={trainingJob.gridWidth}
               gridHeight={trainingJob.gridHeight}
+              winnerNeuron={winnerNeuron}
               onNeuronSelect={setSelectedNeuron}
+              onPaletteChange={setCurrentPalette}
             />
           </main>
 
@@ -127,7 +156,17 @@ export default function TrainingJobDetailPage() {
               dimensions={dimensions ?? []}
               activeDimensionIndex={activeDimensionIndex}
             />
-            <ClassificationResult />
+            <ClassificationResult
+              result={classificationResult}
+              winnerNeuron={winnerNeuron}
+              weights={weights ?? []}
+              activation={activation ?? []}
+              activeDimensionIndex={activeDimensionIndex}
+              gridWidth={trainingJob.gridWidth}
+              gridHeight={trainingJob.gridHeight}
+              palette={currentPalette}
+              onClear={handleClear}
+            />
           </aside>
 
         </div>
@@ -142,11 +181,15 @@ function LeftPanelContent({
   dimsNotFound,
   dimensions,
   onSelectionChange,
+  onClassify,
+  onClear,
 }: {
   dimsLoading: boolean
   dimsNotFound: boolean
   dimensions: ReturnType<typeof useTrainingDimensions>['data']
   onSelectionChange: (index: number) => void
+  onClassify: (inputNorm: number[]) => void
+  onClear: () => void
 }) {
   if (dimsLoading) {
     return (
@@ -171,7 +214,7 @@ function LeftPanelContent({
   return (
     <>
       <DimensionPanel dimensions={dimensions} onSelectionChange={onSelectionChange} />
-      <ClassificationForm dimensions={dimensions} />
+      <ClassificationForm dimensions={dimensions} onClassify={onClassify} onClear={onClear} />
       <LayersPanel />
     </>
   )
