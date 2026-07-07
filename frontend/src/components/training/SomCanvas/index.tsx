@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { Maximize2, Palette } from 'lucide-react'
 import HeatmapCanvas from './HeatmapCanvas'
+import PizarraCanvas from './PizarraCanvas'
+import PizarraToolbar from './PizarraToolbar'
 import { PALETTES, normalizarDimension, normalizarActivacion } from './hooks/useHeatmap'
 import type { ColorStop } from './hooks/useHeatmap'
 import { calcularCentro, calcularVertices, RADIO_INICIAL_HEX } from './hooks/useHexGrid'
 import { useCanvasInteraction } from './hooks/useCanvasInteraction'
 import type { NeuronHit } from './hooks/useCanvasInteraction'
 import { useCamera } from './hooks/useCamera'
+import { usePizarra } from './hooks/usePizarra'
 import { desnormalizarContinuo, desnormalizarDiscreto } from './hooks/useDenormalize'
 import type { TrainingDimension } from '@/types/trainingFiles'
 
@@ -22,6 +25,7 @@ export interface SomCanvasProps {
   winnerNeuron?: NeuronHit | null
   onNeuronSelect?: (neuron: NeuronHit | null) => void
   onPaletteChange?: (palette: ColorStop[]) => void
+  pizarraActiva?: boolean
 }
 
 function stopsToGradient(stops: ColorStop[]): string {
@@ -40,6 +44,7 @@ export default function SomCanvas({
   winnerNeuron,
   onNeuronSelect,
   onPaletteChange,
+  pizarraActiva = false,
 }: SomCanvasProps) {
   // ── Palette ────────────────────────────────────────────────────────────────
   const [activePaletteId, setActivePaletteId] = useState(PALETTES[0].id)
@@ -118,6 +123,28 @@ export default function SomCanvas({
     initCamera()
   }, [canvasSize.width, canvasSize.height, initCamera])
 
+  // ── Pizarra ────────────────────────────────────────────────────────────────
+  const {
+    layers: pizarraLayers,
+    activeId: pizarraActiveId,
+    setActiveId: setPizarraActiveId,
+    tool: pizarraTool,
+    setTool: setPizarraTool,
+    color: pizarraColor,
+    setColor: setPizarraColor,
+    width: pizarraWidth,
+    setWidth: setPizarraWidth,
+    addLayer: addPizarraLayer,
+    removeLayer: removePizarraLayer,
+    toggleLayerVisible: togglePizarraLayerVisible,
+    clearLayer: clearPizarraLayer,
+    undo: undoPizarra,
+    onDrawStart,
+    onDrawMove,
+    onDrawEnd,
+    cancelDraw,
+  } = usePizarra()
+
   // ── Interaction (hover + selection) ───────────────────────────────────────
   const { hoveredNeuron, setHoveredNeuron, selectedNeuron, setSelectedNeuron, findNeuron } =
     useCanvasInteraction({ gridWidth, gridHeight })
@@ -140,16 +167,23 @@ export default function SomCanvas({
   // ── Interaction canvas ─────────────────────────────────────────────────────
   const interactionRef = useRef<HTMLCanvasElement>(null)
 
-  // Non-passive wheel + touch event listeners
+  // Non-passive wheel on container (always active, even when pizarra is on top)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    function handleWheel(e: WheelEvent) {
+      e.preventDefault()
+      const rect = container!.getBoundingClientRect()
+      onWheelZoom(e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
+    }
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    return () => container.removeEventListener('wheel', handleWheel)
+  }, [onWheelZoom])
+
+  // Non-passive touch event listeners on interaction canvas (pan + pinch)
   useEffect(() => {
     const canvas = interactionRef.current
     if (!canvas) return
-
-    function handleWheel(e: WheelEvent) {
-      e.preventDefault()
-      const rect = canvas!.getBoundingClientRect()
-      onWheelZoom(e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
-    }
 
     function handleTouchStart(e: TouchEvent) {
       e.preventDefault()
@@ -190,17 +224,15 @@ export default function SomCanvas({
       }
     }
 
-    canvas.addEventListener('wheel', handleWheel, { passive: false })
     canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
     canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
     canvas.addEventListener('touchend', handleTouchEnd)
     return () => {
-      canvas.removeEventListener('wheel', handleWheel)
       canvas.removeEventListener('touchstart', handleTouchStart)
       canvas.removeEventListener('touchmove', handleTouchMove)
       canvas.removeEventListener('touchend', handleTouchEnd)
     }
-  }, [onWheelZoom, onPanStart, onPanMove, onPanEnd, onPinchStart, onPinchMove, onPinchEnd, canvasToWorld])
+  }, [onPanStart, onPanMove, onPanEnd, onPinchStart, onPinchMove, onPinchEnd, canvasToWorld])
 
   // Draw winner, hover, and selection on interaction canvas
   useEffect(() => {
@@ -371,7 +403,7 @@ export default function SomCanvas({
           panY={panY}
         />
 
-        {/* Layer 2 — interaction (receives mouse + touch events) */}
+        {/* Layer 2 — interaction (receives mouse + touch events when pizarra inactive) */}
         <canvas
           ref={interactionRef}
           onMouseDown={handleMouseDown}
@@ -385,20 +417,49 @@ export default function SomCanvas({
             height: '100%',
             zIndex: 2,
             cursor: isPanning ? 'grabbing' : hoveredNeuron ? 'pointer' : 'grab',
+            pointerEvents: pizarraActiva ? 'none' : 'auto',
           }}
         />
 
-        {/* Layer 3 — pizarra (future) */}
-        <canvas
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            zIndex: 3,
-            pointerEvents: 'none',
-          }}
-        />
+        {/* Layer 3+ — pizarra (drawing board) */}
+        {pizarraActiva && (
+          <PizarraCanvas
+            pizarraActiva={pizarraActiva}
+            layers={pizarraLayers}
+            tool={pizarraTool}
+            color={pizarraColor}
+            width={pizarraWidth}
+            canvasSize={canvasSize}
+            zoom={zoom}
+            panX={panX}
+            panY={panY}
+            canvasToWorld={canvasToWorld}
+            onDrawStart={onDrawStart}
+            onDrawMove={onDrawMove}
+            onDrawEnd={onDrawEnd}
+            cancelDraw={cancelDraw}
+          />
+        )}
+
+        {/* Pizarra toolbar */}
+        {pizarraActiva && (
+          <PizarraToolbar
+            layers={pizarraLayers}
+            activeId={pizarraActiveId}
+            setActiveId={setPizarraActiveId}
+            tool={pizarraTool}
+            setTool={setPizarraTool}
+            color={pizarraColor}
+            setColor={setPizarraColor}
+            width={pizarraWidth}
+            setWidth={setPizarraWidth}
+            addLayer={addPizarraLayer}
+            removeLayer={removePizarraLayer}
+            toggleLayerVisible={togglePizarraLayerVisible}
+            clearLayer={clearPizarraLayer}
+            undo={undoPizarra}
+          />
+        )}
 
         {/* Tooltip */}
         {tooltipCursor && hoveredNeuron && (

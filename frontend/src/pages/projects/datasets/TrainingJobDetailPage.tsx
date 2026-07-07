@@ -69,6 +69,7 @@ export default function TrainingJobDetailPage() {
   const [winnerNeuron, setWinnerNeuron] = useState<NeuronHit | null>(null)
   const [classificationResult, setClassificationResult] = useState<ClassificationMatch | null>(null)
   const [currentPalette, setCurrentPalette] = useState<ColorStop[]>(PALETTES[0].stops)
+  const [pizarraActiva, setPizarraActiva] = useState(false)
 
   // ── Right-panel resizing ─────────────────────────────────────────────────
   const [rightPanelWidth, setRightPanelWidth] = useState(getStoredWidth)
@@ -187,6 +188,7 @@ export default function TrainingJobDetailPage() {
               onSelectionChange={setActiveDimensionIndex}
               onClassify={handleClassify}
               onClear={handleClear}
+              onPizarraChange={setPizarraActiva}
             />
           </aside>
 
@@ -202,6 +204,7 @@ export default function TrainingJobDetailPage() {
               winnerNeuron={winnerNeuron}
               onNeuronSelect={setSelectedNeuron}
               onPaletteChange={setCurrentPalette}
+              pizarraActiva={pizarraActiva}
             />
           </main>
 
@@ -252,6 +255,7 @@ function LeftPanelContent({
   onSelectionChange,
   onClassify,
   onClear,
+  onPizarraChange,
 }: {
   dimsLoading: boolean
   dimsNotFound: boolean
@@ -259,6 +263,7 @@ function LeftPanelContent({
   onSelectionChange: (index: number) => void
   onClassify: (inputNorm: number[]) => void
   onClear: () => void
+  onPizarraChange?: (active: boolean) => void
 }) {
   if (dimsLoading) {
     return (
@@ -284,7 +289,7 @@ function LeftPanelContent({
     <>
       <DimensionPanel dimensions={dimensions} onSelectionChange={onSelectionChange} />
       <ClassificationForm dimensions={dimensions} onClassify={onClassify} onClear={onClear} />
-      <LayersPanel />
+      <LayersPanel onPizarraChange={onPizarraChange} />
     </>
   )
 }

@@ -20,11 +20,17 @@ const DEFAULT_LAYERS: Record<Layer, boolean> = {
   Clasificación: false,
 }
 
-export default function LayersPanel() {
+interface LayersPanelProps {
+  onPizarraChange?: (active: boolean) => void
+}
+
+export default function LayersPanel({ onPizarraChange }: LayersPanelProps) {
   const [layers, setLayers] = useState<Record<Layer, boolean>>(DEFAULT_LAYERS)
 
   function toggle(layer: Layer) {
-    setLayers((prev) => ({ ...prev, [layer]: !prev[layer] }))
+    const next = !layers[layer]
+    setLayers((prev) => ({ ...prev, [layer]: next }))
+    if (layer === 'Pizarra') onPizarraChange?.(next)
   }
 
   return (
