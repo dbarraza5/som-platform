@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import type { TrainingDimension } from '@/types/trainingFiles'
 import { normalizarContinuo, normalizarDiscreto } from '@/components/training/SomCanvas/hooks/useDenormalize'
+
+// Dimensions with more unique values than this threshold use a text input
+// instead of a <select> to avoid rendering thousands of <option> nodes.
+const MAX_SELECT_OPTIONS = 50
 
 interface ClassificationFormProps {
   dimensions: TrainingDimension[]
@@ -15,6 +19,17 @@ interface ClassificationFormProps {
 export default function ClassificationForm({ dimensions, onClassify, onClear }: ClassificationFormProps) {
   const [values, setValues] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  // Pre-build Sets for high-cardinality discrete dims (O(1) lookup in validation)
+  const highCardSets = useMemo(() => {
+    const sets: Record<string, Set<string>> = {}
+    for (const dim of dimensions) {
+      if (dim.tipo_dato === 'discreto' && dim.rango && dim.rango.length > MAX_SELECT_OPTIONS) {
+        sets[dim.nombre] = new Set(dim.rango.map(String))
+      }
+    }
+    return sets
+  }, [dimensions])
 
   function setValue(nombre: string, value: string) {
     setValues((prev) => ({ ...prev, [nombre]: value }))
@@ -45,7 +60,11 @@ export default function ClassificationForm({ dimensions, onClassify, onClear }: 
           }
         }
       } else {
-        if (raw === '') newErrors[dim.nombre] = 'Selecciona una opción.'
+        if (raw === '') {
+          newErrors[dim.nombre] = 'Selecciona una opción.'
+        } else if (highCardSets[dim.nombre] && !highCardSets[dim.nombre].has(raw)) {
+          newErrors[dim.nombre] = 'Valor no encontrado en el dataset.'
+        }
       }
     }
 
@@ -87,6 +106,16 @@ export default function ClassificationForm({ dimensions, onClassify, onClear }: 
                 max={dim.max}
                 step={0.01}
                 placeholder={`Ej: ${dim.min} - ${dim.max}`}
+                value={values[dim.nombre] ?? ''}
+                onChange={(e) => setValue(dim.nombre, e.target.value)}
+                className={`mt-1 h-8 text-sm ${errors[dim.nombre] ? 'border-destructive' : ''}`}
+              />
+            ) : highCardSets[dim.nombre] ? (
+              // High-cardinality discrete: text input avoids rendering thousands of <option> nodes
+              <Input
+                id={`cls-${dim.nombre}`}
+                type="text"
+                placeholder={`${(dim.rango?.length ?? 0).toLocaleString()} valores únicos`}
                 value={values[dim.nombre] ?? ''}
                 onChange={(e) => setValue(dim.nombre, e.target.value)}
                 className={`mt-1 h-8 text-sm ${errors[dim.nombre] ? 'border-destructive' : ''}`}
