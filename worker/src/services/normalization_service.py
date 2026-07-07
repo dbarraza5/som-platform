@@ -79,14 +79,22 @@ class NormalizationService:
 
     @staticmethod
     def _es_columna_continua(serie: pd.Series) -> bool:
-        return pd.to_numeric(serie, errors="coerce").notna().all()
+        non_missing = serie[serie.str.lower() != "nan"]
+        if non_missing.empty:
+            return False
+        return pd.to_numeric(non_missing, errors="coerce").notna().all()
 
     def _castear_y_describir(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
         df_cast = df.copy()
         dimensiones: dict[str, dict] = {}
 
         for col in df.columns:
-            serie = df[col].astype(str).str.strip().str.strip('"').str.strip("'")
+            # apply() guarantees Python str objects even on pandas 3.x (where
+            # astype(str) produces StringDtype and leaves NaN as pd.NA instead
+            # of converting it to the string "nan").
+            serie = df[col].apply(
+                lambda x: "nan" if pd.isna(x) else str(x).strip().strip('"').strip("'")
+            )
 
             if self._es_columna_continua(serie):
                 valores = pd.to_numeric(serie, errors="coerce").fillna(-1.0)
@@ -97,7 +105,7 @@ class NormalizationService:
                     "max": float(valores.max()),
                 }
             else:
-                categorias = sorted(serie.unique())
+                categorias = sorted(str(v) for v in serie.unique())
                 mapeo = {cat: i + 1 for i, cat in enumerate(categorias)}
                 df_cast[col] = serie.map(mapeo).astype(int)
                 dimensiones[col] = {
