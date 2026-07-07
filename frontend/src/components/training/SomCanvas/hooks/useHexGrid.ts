@@ -1,3 +1,6 @@
+export const RADIO_INICIAL_HEX = 12
+export const RADIO_MINIMO_HEX = 6
+
 const SQRT3 = Math.sqrt(3)
 
 export function calcularRadio(ancho: number, alto: number, cols: number, filas: number): number {

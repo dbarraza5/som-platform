@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
-import { Palette } from 'lucide-react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
+import { Maximize2, Palette } from 'lucide-react'
 import HeatmapCanvas from './HeatmapCanvas'
 import { PALETTES, normalizarDimension, normalizarActivacion } from './hooks/useHeatmap'
 import type { ColorStop } from './hooks/useHeatmap'
-import { calcularCentro, calcularVertices } from './hooks/useHexGrid'
+import { calcularCentro, calcularVertices, RADIO_INICIAL_HEX } from './hooks/useHexGrid'
 import { useCanvasInteraction } from './hooks/useCanvasInteraction'
 import type { NeuronHit } from './hooks/useCanvasInteraction'
+import { useCamera } from './hooks/useCamera'
 import { desnormalizarContinuo, desnormalizarDiscreto } from './hooks/useDenormalize'
 import type { TrainingDimension } from '@/types/trainingFiles'
 
@@ -27,7 +28,6 @@ function stopsToGradient(stops: ColorStop[]): string {
   return `linear-gradient(to right, ${stops.map((s) => s.color).join(', ')})`
 }
 
-// Bright blue visible on any heatmap background
 const SELECTION_COLOR = 'hsl(221,83%,53%)'
 
 export default function SomCanvas({
@@ -41,7 +41,7 @@ export default function SomCanvas({
   onNeuronSelect,
   onPaletteChange,
 }: SomCanvasProps) {
-  // ── Palette state ──────────────────────────────────────────────────────────
+  // ── Palette ────────────────────────────────────────────────────────────────
   const [activePaletteId, setActivePaletteId] = useState(PALETTES[0].id)
   const [activePalette, setActivePalette] = useState<ColorStop[]>(PALETTES[0].stops)
   const [showPicker, setShowPicker] = useState(false)
@@ -84,91 +84,196 @@ export default function SomCanvas({
     onPaletteChange?.(stops)
   }
 
+  // ── Canvas size (single ResizeObserver on the container) ───────────────────
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect
+      setCanvasSize({ width, height })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // ── Camera ─────────────────────────────────────────────────────────────────
+  const {
+    zoom, panX, panY, isPanning,
+    initCamera, resetCamera, zoomIn, zoomOut,
+    onWheelZoom, onPanStart, onPanMove, onPanEnd,
+    onPinchStart, onPinchMove, onPinchEnd,
+    canvasToWorld,
+  } = useCamera({
+    canvasWidth: canvasSize.width,
+    canvasHeight: canvasSize.height,
+    gridWidth,
+    gridHeight,
+  })
+
+  // Init camera once canvas has a size
+  useEffect(() => {
+    initCamera()
+  }, [canvasSize.width, canvasSize.height, initCamera])
+
+  // ── Interaction (hover + selection) ───────────────────────────────────────
+  const { hoveredNeuron, setHoveredNeuron, selectedNeuron, setSelectedNeuron, findNeuron } =
+    useCanvasInteraction({ gridWidth, gridHeight })
+
+  // Stable refs for touch handlers (avoid stale closures in useEffect)
+  const selectedNeuronRef = useRef(selectedNeuron)
+  selectedNeuronRef.current = selectedNeuron
+  const findNeuronRef = useRef(findNeuron)
+  findNeuronRef.current = findNeuron
+  const onNeuronSelectRef = useRef(onNeuronSelect)
+  onNeuronSelectRef.current = onNeuronSelect
+  const setHoveredRef = useRef(setHoveredNeuron)
+  setHoveredRef.current = setHoveredNeuron
+  const setSelectedRef = useRef(setSelectedNeuron)
+  setSelectedRef.current = setSelectedNeuron
+
+  // ── Tooltip cursor position ────────────────────────────────────────────────
+  const [tooltipCursor, setTooltipCursor] = useState<{ x: number; y: number } | null>(null)
+
   // ── Interaction canvas ─────────────────────────────────────────────────────
   const interactionRef = useRef<HTMLCanvasElement>(null)
 
-  const {
-    hoveredNeuron,
-    selectedNeuron,
-    tooltip,
-    size,
-    radio,
-    offsetX,
-    offsetY,
-    onMouseMove,
-    onMouseLeave,
-    onClick: onCanvasClick,
-  } = useCanvasInteraction({ canvasRef: interactionRef, gridWidth, gridHeight, onNeuronSelect })
+  // Non-passive wheel + touch event listeners
+  useEffect(() => {
+    const canvas = interactionRef.current
+    if (!canvas) return
+
+    function handleWheel(e: WheelEvent) {
+      e.preventDefault()
+      const rect = canvas!.getBoundingClientRect()
+      onWheelZoom(e.deltaY, e.clientX - rect.left, e.clientY - rect.top)
+    }
+
+    function handleTouchStart(e: TouchEvent) {
+      e.preventDefault()
+      if (e.touches.length === 1) {
+        onPanStart(e.touches[0].clientX, e.touches[0].clientY)
+      } else if (e.touches.length === 2) {
+        const rect = canvas!.getBoundingClientRect()
+        onPinchStart(e.touches, rect)
+      }
+    }
+
+    function handleTouchMove(e: TouchEvent) {
+      e.preventDefault()
+      if (e.touches.length === 1) {
+        onPanMove(e.touches[0].clientX, e.touches[0].clientY)
+        setHoveredRef.current(null)
+        setTooltipCursor(null)
+      } else if (e.touches.length === 2) {
+        onPinchMove(e.touches)
+      }
+    }
+
+    function handleTouchEnd(e: TouchEvent) {
+      const wasClick = onPanEnd()
+      onPinchEnd()
+      setHoveredRef.current(null)
+      setTooltipCursor(null)
+      if (wasClick && e.changedTouches.length === 1) {
+        const rect = canvas!.getBoundingClientRect()
+        const cx = e.changedTouches[0].clientX - rect.left
+        const cy = e.changedTouches[0].clientY - rect.top
+        const { x: wx, y: wy } = canvasToWorld(cx, cy)
+        const hit = findNeuronRef.current(wx, wy)
+        const prev = selectedNeuronRef.current
+        const next = prev?.index === hit?.index ? null : hit
+        setSelectedRef.current(next)
+        onNeuronSelectRef.current?.(next)
+      }
+    }
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false })
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false })
+    canvas.addEventListener('touchend', handleTouchEnd)
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel)
+      canvas.removeEventListener('touchstart', handleTouchStart)
+      canvas.removeEventListener('touchmove', handleTouchMove)
+      canvas.removeEventListener('touchend', handleTouchEnd)
+    }
+  }, [onWheelZoom, onPanStart, onPanMove, onPanEnd, onPinchStart, onPinchMove, onPinchEnd, canvasToWorld])
 
   // Draw winner, hover, and selection on interaction canvas
   useEffect(() => {
     const canvas = interactionRef.current
-    if (!canvas || size.width === 0 || radio === 0) return
+    if (!canvas || canvasSize.width === 0) return
 
     const dpr = window.devicePixelRatio || 1
-    const w = Math.round(size.width * dpr)
-    const h = Math.round(size.height * dpr)
+    const w = Math.round(canvasSize.width * dpr)
+    const h = Math.round(canvasSize.height * dpr)
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w
       canvas.height = h
     }
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, size.width, size.height)
+
+    // Clear in device-pixel space, then apply camera transform
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.restore()
+    ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panX * dpr, panY * dpr)
 
     function hexPath(col: number, row: number) {
-      const { cx: rawCx, cy: rawCy } = calcularCentro(col, row, radio)
-      const verts = calcularVertices(rawCx + offsetX, rawCy + offsetY, radio)
-      ctx.beginPath()
-      ctx.moveTo(verts[0].x, verts[0].y)
-      for (let v = 1; v < 6; v++) ctx.lineTo(verts[v].x, verts[v].y)
-      ctx.closePath()
+      const { cx, cy } = calcularCentro(col, row, RADIO_INICIAL_HEX)
+      const verts = calcularVertices(cx, cy, RADIO_INICIAL_HEX)
+      ctx!.beginPath()
+      ctx!.moveTo(verts[0].x, verts[0].y)
+      for (let v = 1; v < 6; v++) ctx!.lineTo(verts[v].x, verts[v].y)
+      ctx!.closePath()
     }
 
-    // 1. Draw winner: accent fill + accent border
+    // 1. Winner: accent fill + accent border
     if (winnerNeuron) {
       hexPath(winnerNeuron.col, winnerNeuron.row)
       ctx.fillStyle = 'hsla(221,83%,53%,0.4)'
       ctx.fill()
       ctx.strokeStyle = SELECTION_COLOR
-      ctx.lineWidth = 3
+      ctx.lineWidth = 3 / zoom
       ctx.stroke()
     }
 
-    // 2. Draw selected: white halo + accent border (on top of winner if same neuron)
+    // 2. Selected: white halo + accent border
     if (selectedNeuron) {
       hexPath(selectedNeuron.col, selectedNeuron.row)
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'
-      ctx.lineWidth = 3.5
+      ctx.lineWidth = 3.5 / zoom
       ctx.stroke()
       ctx.strokeStyle = SELECTION_COLOR
-      ctx.lineWidth = 2
+      ctx.lineWidth = 2 / zoom
       ctx.stroke()
     }
 
-    // 3. Draw hover: white fill + white border (unless hovering selected)
+    // 3. Hovered: white fill + white border
     if (hoveredNeuron) {
       hexPath(hoveredNeuron.col, hoveredNeuron.row)
       ctx.fillStyle = 'rgba(255,255,255,0.25)'
       ctx.fill()
       if (hoveredNeuron.index !== selectedNeuron?.index) {
         ctx.strokeStyle = 'rgba(255,255,255,0.9)'
-        ctx.lineWidth = 2
+        ctx.lineWidth = 2 / zoom
         ctx.stroke()
       }
     }
 
-    // 4. Draw winner center dot (always on top so it's visible over hover/selection)
+    // 4. Winner center dot (always on top)
     if (winnerNeuron) {
-      const { cx: rawCx, cy: rawCy } = calcularCentro(winnerNeuron.col, winnerNeuron.row, radio)
-      const cx = rawCx + offsetX
-      const cy = rawCy + offsetY
-      const dotRadius = Math.max(3, radio * 0.2)
+      const { cx, cy } = calcularCentro(winnerNeuron.col, winnerNeuron.row, RADIO_INICIAL_HEX)
+      const dotRadius = Math.max(RADIO_INICIAL_HEX * 0.2, 2 / zoom)
 
       ctx.fillStyle = 'rgba(255,255,255,0.9)'
       ctx.beginPath()
-      ctx.arc(cx, cy, dotRadius + 1.5, 0, Math.PI * 2)
+      ctx.arc(cx, cy, dotRadius + 1.5 / zoom, 0, Math.PI * 2)
       ctx.fill()
 
       ctx.fillStyle = SELECTION_COLOR
@@ -176,7 +281,48 @@ export default function SomCanvas({
       ctx.arc(cx, cy, dotRadius, 0, Math.PI * 2)
       ctx.fill()
     }
-  }, [hoveredNeuron, selectedNeuron, winnerNeuron, size, radio, offsetX, offsetY])
+  }, [hoveredNeuron, selectedNeuron, winnerNeuron, canvasSize, zoom, panX, panY])
+
+  // ── Mouse events on interaction canvas ────────────────────────────────────
+  function handleMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
+    onPanStart(e.clientX, e.clientY)
+  }
+
+  function handleMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const cx = e.clientX - rect.left
+    const cy = e.clientY - rect.top
+    const nowPanning = onPanMove(e.clientX, e.clientY)
+    if (!nowPanning) {
+      const { x: wx, y: wy } = canvasToWorld(cx, cy)
+      const hit = findNeuron(wx, wy)
+      setHoveredNeuron(hit)
+      setTooltipCursor(hit ? { x: cx, y: cy } : null)
+    } else {
+      setHoveredNeuron(null)
+      setTooltipCursor(null)
+    }
+  }
+
+  function handleMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
+    const wasClick = onPanEnd()
+    if (wasClick) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const cx = e.clientX - rect.left
+      const cy = e.clientY - rect.top
+      const { x: wx, y: wy } = canvasToWorld(cx, cy)
+      const hit = findNeuron(wx, wy)
+      const next = selectedNeuron?.index === hit?.index ? null : hit
+      setSelectedNeuron(next)
+      onNeuronSelect?.(next)
+    }
+  }
+
+  function handleMouseLeave() {
+    onPanEnd()
+    setHoveredNeuron(null)
+    setTooltipCursor(null)
+  }
 
   // ── Normalized values for tooltip ─────────────────────────────────────────
   const normalizedValues = useMemo(() => {
@@ -211,7 +357,7 @@ export default function SomCanvas({
   return (
     <div className="flex h-full flex-col">
       {/* Canvas stack */}
-      <div className="relative min-h-0 flex-1">
+      <div ref={containerRef} className="relative min-h-0 flex-1">
         {/* Layer 1 — heatmap */}
         <HeatmapCanvas
           weights={weights}
@@ -220,21 +366,25 @@ export default function SomCanvas({
           gridWidth={gridWidth}
           gridHeight={gridHeight}
           palette={activePalette}
+          zoom={zoom}
+          panX={panX}
+          panY={panY}
         />
 
-        {/* Layer 2 — interaction */}
+        {/* Layer 2 — interaction (receives mouse + touch events) */}
         <canvas
           ref={interactionRef}
-          onMouseMove={onMouseMove}
-          onMouseLeave={onMouseLeave}
-          onClick={onCanvasClick}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
           style={{
             position: 'absolute',
             inset: 0,
             width: '100%',
             height: '100%',
             zIndex: 2,
-            cursor: hoveredNeuron ? 'pointer' : 'default',
+            cursor: isPanning ? 'grabbing' : hoveredNeuron ? 'pointer' : 'grab',
           }}
         />
 
@@ -251,12 +401,12 @@ export default function SomCanvas({
         />
 
         {/* Tooltip */}
-        {tooltip && hoveredNeuron && (
+        {tooltipCursor && hoveredNeuron && (
           <div
             style={{
               position: 'absolute',
-              left: Math.min(tooltip.x + 14, size.width - 190),
-              top: Math.max(8, tooltip.y - 48),
+              left: Math.min(tooltipCursor.x + 14, canvasSize.width - 190),
+              top: Math.max(8, tooltipCursor.y - 48),
               zIndex: 20,
               pointerEvents: 'none',
             }}
@@ -268,6 +418,41 @@ export default function SomCanvas({
             <p className="mt-0.5 text-muted-foreground">{tooltipValue(hoveredNeuron.index)}</p>
           </div>
         )}
+
+        {/* Zoom controls — bottom-left */}
+        <div
+          style={{ position: 'absolute', bottom: 8, left: 8, zIndex: 10 }}
+          className="flex items-center rounded-md border bg-background/90 shadow-sm backdrop-blur-sm"
+        >
+          <button
+            type="button"
+            onClick={zoomOut}
+            title="Alejar"
+            className="flex h-7 w-7 items-center justify-center rounded-l-md text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            −
+          </button>
+          <span className="min-w-[3.25rem] px-1 text-center text-xs font-medium tabular-nums text-foreground">
+            {Math.round(zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={zoomIn}
+            title="Acercar"
+            className="flex h-7 w-7 items-center justify-center text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            +
+          </button>
+          <div className="mx-0.5 h-4 w-px bg-border" />
+          <button
+            type="button"
+            onClick={resetCamera}
+            title="Ajustar a pantalla"
+            className="flex h-7 w-7 items-center justify-center rounded-r-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
 
         {/* Palette button — floating top-right */}
         <button

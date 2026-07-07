@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { calcularRadio, calcularCentro, calcularVertices } from './hooks/useHexGrid'
+import { calcularCentro, calcularVertices, RADIO_INICIAL_HEX } from './hooks/useHexGrid'
 import { normalizarDimension, normalizarActivacion, valorAColor } from './hooks/useHeatmap'
 import type { ColorStop } from './hooks/useHeatmap'
 
@@ -10,6 +10,9 @@ interface HeatmapCanvasProps {
   gridWidth: number
   gridHeight: number
   palette: ColorStop[]
+  zoom: number
+  panX: number
+  panY: number
 }
 
 export default function HeatmapCanvas({
@@ -19,6 +22,9 @@ export default function HeatmapCanvas({
   gridWidth,
   gridHeight,
   palette,
+  zoom,
+  panX,
+  panY,
 }: HeatmapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -41,16 +47,14 @@ export default function HeatmapCanvas({
     if (weights.length === 0) return
 
     const dpr = window.devicePixelRatio || 1
-    canvas.width = size.width * dpr
-    canvas.height = size.height * dpr
+    canvas.width = Math.round(size.width * dpr)
+    canvas.height = Math.round(size.height * dpr)
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    ctx.scale(dpr, dpr)
 
-    const radio = calcularRadio(size.width, size.height, gridWidth, gridHeight)
-    const SQRT3 = Math.sqrt(3)
-    const offsetX = (size.width - (gridWidth + 0.5) * SQRT3 * radio) / 2
-    const offsetY = (size.height - (gridHeight * 1.5 + 0.5) * radio) / 2
+    // Clear entire canvas, then apply camera transform
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.setTransform(zoom * dpr, 0, 0, zoom * dpr, panX * dpr, panY * dpr)
 
     const normalizedValues =
       activeDimensionIndex === -1
@@ -60,8 +64,8 @@ export default function HeatmapCanvas({
     for (let col = 0; col < gridWidth; col++) {
       for (let row = 0; row < gridHeight; row++) {
         const neuronIndex = row * gridWidth + col
-        const { cx: rawCx, cy: rawCy } = calcularCentro(col, row, radio)
-        const vertices = calcularVertices(rawCx + offsetX, rawCy + offsetY, radio)
+        const { cx, cy } = calcularCentro(col, row, RADIO_INICIAL_HEX)
+        const vertices = calcularVertices(cx, cy, RADIO_INICIAL_HEX)
         const color = valorAColor(normalizedValues[neuronIndex] ?? 0, palette)
 
         ctx.fillStyle = color
@@ -72,11 +76,11 @@ export default function HeatmapCanvas({
         ctx.fill()
 
         ctx.strokeStyle = 'rgba(0,0,0,0.08)'
-        ctx.lineWidth = 0.5
+        ctx.lineWidth = 0.5 / zoom
         ctx.stroke()
       }
     }
-  }, [size, activeDimensionIndex, weights, activation, gridWidth, gridHeight, palette])
+  }, [size, activeDimensionIndex, weights, activation, gridWidth, gridHeight, palette, zoom, panX, panY])
 
   return (
     <div ref={containerRef} style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
