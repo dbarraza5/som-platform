@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle, ArrowLeft, Loader2 } from 'lucide-react'
@@ -21,6 +21,23 @@ import { PALETTES } from '@/components/training/SomCanvas/hooks/useHeatmap'
 import type { ColorStop } from '@/components/training/SomCanvas/hooks/useHeatmap'
 import { useClassification } from '@/components/training/SomCanvas/hooks/useClassification'
 import type { ClassificationMatch } from '@/components/training/SomCanvas/hooks/useClassification'
+
+// ── Right-panel resize constants ───────────────────────────────────────────
+const RIGHT_PANEL_MIN = 240
+const RIGHT_PANEL_MAX = 520
+const RIGHT_PANEL_DEFAULT = 320
+const LS_KEY = 'som-panel-right-width'
+
+function getStoredWidth(): number {
+  try {
+    const v = localStorage.getItem(LS_KEY)
+    if (v) {
+      const n = parseInt(v, 10)
+      if (!isNaN(n) && n >= RIGHT_PANEL_MIN && n <= RIGHT_PANEL_MAX) return n
+    }
+  } catch {}
+  return RIGHT_PANEL_DEFAULT
+}
 
 export default function TrainingJobDetailPage() {
   const { id: projectId, datasetId, trainingId } = useParams<{
@@ -52,6 +69,46 @@ export default function TrainingJobDetailPage() {
   const [winnerNeuron, setWinnerNeuron] = useState<NeuronHit | null>(null)
   const [classificationResult, setClassificationResult] = useState<ClassificationMatch | null>(null)
   const [currentPalette, setCurrentPalette] = useState<ColorStop[]>(PALETTES[0].stops)
+
+  // ── Right-panel resizing ─────────────────────────────────────────────────
+  const [rightPanelWidth, setRightPanelWidth] = useState(getStoredWidth)
+  const rightWidthRef = useRef(rightPanelWidth)
+  const [lgScreen, setLgScreen] = useState(() => window.innerWidth >= 1024)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const handler = (e: MediaQueryListEvent) => setLgScreen(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  function handleResizerMouseDown(e: React.MouseEvent) {
+    if (!lgScreen) return
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = rightPanelWidth
+
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+
+    function onMouseMove(ev: MouseEvent) {
+      const dx = startX - ev.clientX
+      const next = Math.max(RIGHT_PANEL_MIN, Math.min(RIGHT_PANEL_MAX, startWidth + dx))
+      setRightPanelWidth(next)
+      rightWidthRef.current = next
+    }
+
+    function onMouseUp() {
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      try { localStorage.setItem(LS_KEY, String(rightWidthRef.current)) } catch {}
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }
 
   const { clasificar } = useClassification({
     weights: weights ?? [],
@@ -148,8 +205,20 @@ export default function TrainingJobDetailPage() {
             />
           </main>
 
+          {/* Resizer — only active on lg+ screens */}
+          <div
+            className="group relative hidden shrink-0 cursor-col-resize lg:block lg:w-1.5 lg:order-3"
+            onMouseDown={handleResizerMouseDown}
+          >
+            <div className="absolute inset-0 transition-colors group-hover:bg-primary/10" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-primary/40" />
+          </div>
+
           {/* Right panel */}
-          <aside className="order-3 w-full shrink-0 overflow-y-auto border-t bg-muted/60 lg:w-72 lg:border-l lg:border-t-0">
+          <aside
+            className="order-3 w-full shrink-0 overflow-y-auto border-t bg-muted/60 lg:order-4 lg:border-t-0"
+            style={lgScreen ? { width: rightPanelWidth } : undefined}
+          >
             <NeuronDetail
               selectedNeuron={selectedNeuron}
               allWeights={weights ?? []}

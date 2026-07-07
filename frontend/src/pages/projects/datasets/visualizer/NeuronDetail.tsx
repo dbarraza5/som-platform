@@ -1,5 +1,6 @@
 import { MousePointer } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Tooltip } from '@/components/ui/tooltip'
 import type { NeuronHit } from '@/components/training/SomCanvas/hooks/useCanvasInteraction'
 import type { TrainingDimension } from '@/types/trainingFiles'
 import { desnormalizarContinuo, desnormalizarDiscreto } from '@/components/training/SomCanvas/hooks/useDenormalize'
@@ -104,8 +105,10 @@ function DimensionRow({
     const val = desnormalizarContinuo(norm, dim.min, dim.max)
     return (
       <tr className={cn('border-b last:border-b-0', isActive && 'bg-primary/5')}>
-        <td className={cn('max-w-0 truncate px-2 py-1.5', isActive && 'font-medium')}>
-          {dim.nombre}
+        <td className={cn('max-w-0 overflow-hidden px-2 py-1.5', isActive && 'font-medium')}>
+          <Tooltip content={dim.nombre} className="block truncate">
+            {dim.nombre}
+          </Tooltip>
         </td>
         <td className="px-2 py-1.5 text-right tabular-nums">{val}</td>
       </tr>
@@ -123,8 +126,10 @@ function DimensionRow({
         result.empate && 'bg-amber-50 dark:bg-amber-950/20',
       )}
     >
-      <td className={cn('max-w-0 truncate px-2 py-1.5', isActive && 'font-medium')}>
-        {dim.nombre}
+      <td className={cn('max-w-0 overflow-hidden px-2 py-1.5', isActive && 'font-medium')}>
+        <Tooltip content={dim.nombre} className="block truncate">
+          {dim.nombre}
+        </Tooltip>
       </td>
       <td className="px-2 py-1.5 text-right leading-snug">
         {showPct ? (
