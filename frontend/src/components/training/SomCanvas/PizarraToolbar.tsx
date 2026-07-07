@@ -1,42 +1,33 @@
 import { type ReactNode } from 'react'
-import { Pencil, Eraser, Undo2, Trash2, Plus, Eye, EyeOff } from 'lucide-react'
+import { Pencil, Eraser, Undo2, Trash2 } from 'lucide-react'
 import { PIZARRA_COLORS, PIZARRA_WIDTHS } from './hooks/usePizarra'
-import type { PizarraLayer, PizarraTool } from './hooks/usePizarra'
+import type { PizarraTool } from './hooks/usePizarra'
 
 interface PizarraToolbarProps {
-  layers: PizarraLayer[]
-  activeId: string
-  setActiveId: (id: string) => void
   tool: PizarraTool
   setTool: (t: PizarraTool) => void
   color: string
   setColor: (c: string) => void
   width: number
   setWidth: (w: number) => void
-  addLayer: () => void
-  removeLayer: (id: string) => void
-  toggleLayerVisible: (id: string) => void
-  clearLayer: (id?: string) => void
-  undo: (id?: string) => void
+  hasStrokes: boolean
+  clearLayer: () => void
+  undo: () => void
 }
 
 const WIDTH_LABELS = ['S', 'M', 'L']
 
 export default function PizarraToolbar({
-  layers, activeId, setActiveId,
   tool, setTool,
   color, setColor,
   width, setWidth,
-  addLayer, removeLayer, toggleLayerVisible, clearLayer, undo,
+  hasStrokes, clearLayer, undo,
 }: PizarraToolbarProps) {
-  const activeLayer = layers.find(l => l.id === activeId)
-
   return (
     <div
-      style={{ position: 'absolute', top: 8, left: 8, zIndex: 10, width: 192 }}
+      style={{ position: 'absolute', top: 8, left: 8, zIndex: 10, width: 184 }}
       className="rounded-lg border bg-background/95 shadow-lg backdrop-blur-sm"
     >
-      {/* Header */}
       <div className="border-b px-3 py-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pizarra</p>
       </div>
@@ -48,19 +39,11 @@ export default function PizarraToolbar({
             Herramienta
           </p>
           <div className="flex gap-1">
-            <ToolButton
-              active={tool === 'pen'}
-              title="Lápiz"
-              onClick={() => setTool('pen')}
-            >
+            <ToolButton active={tool === 'pen'} title="Lápiz" onClick={() => setTool('pen')}>
               <Pencil className="h-3.5 w-3.5" />
               <span className="text-xs">Lápiz</span>
             </ToolButton>
-            <ToolButton
-              active={tool === 'eraser'}
-              title="Borrador"
-              onClick={() => setTool('eraser')}
-            >
+            <ToolButton active={tool === 'eraser'} title="Borrador" onClick={() => setTool('eraser')}>
               <Eraser className="h-3.5 w-3.5" />
               <span className="text-xs">Borrador</span>
             </ToolButton>
@@ -124,8 +107,8 @@ export default function PizarraToolbar({
           <button
             type="button"
             title="Deshacer"
-            onClick={() => undo()}
-            disabled={!activeLayer || activeLayer.strokes.length === 0}
+            onClick={undo}
+            disabled={!hasStrokes}
             className="flex h-7 flex-1 items-center justify-center gap-1 rounded border text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Undo2 className="h-3 w-3" />
@@ -133,66 +116,14 @@ export default function PizarraToolbar({
           </button>
           <button
             type="button"
-            title="Limpiar capa"
-            onClick={() => clearLayer()}
-            disabled={!activeLayer || activeLayer.strokes.length === 0}
+            title="Limpiar"
+            onClick={clearLayer}
+            disabled={!hasStrokes}
             className="flex h-7 flex-1 items-center justify-center gap-1 rounded border text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Trash2 className="h-3 w-3" />
             Limpiar
           </button>
-        </div>
-
-        {/* Layers */}
-        <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              Capas
-            </p>
-            <button
-              type="button"
-              title="Nueva capa"
-              onClick={addLayer}
-              className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
-          <ul className="space-y-0.5">
-            {layers.map(layer => (
-              <li
-                key={layer.id}
-                onClick={() => setActiveId(layer.id)}
-                className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${
-                  layer.id === activeId
-                    ? 'bg-primary/10 font-medium text-primary'
-                    : 'text-foreground hover:bg-muted'
-                }`}
-              >
-                <span className="min-w-0 flex-1 truncate">{layer.name}</span>
-                <button
-                  type="button"
-                  title={layer.visible ? 'Ocultar' : 'Mostrar'}
-                  onClick={e => { e.stopPropagation(); toggleLayerVisible(layer.id) }}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  {layer.visible
-                    ? <Eye className="h-3 w-3" />
-                    : <EyeOff className="h-3 w-3" />
-                  }
-                </button>
-                <button
-                  type="button"
-                  title="Eliminar capa"
-                  onClick={e => { e.stopPropagation(); removeLayer(layer.id) }}
-                  disabled={layers.length <= 1}
-                  className="shrink-0 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </li>
-            ))}
-          </ul>
         </div>
       </div>
     </div>

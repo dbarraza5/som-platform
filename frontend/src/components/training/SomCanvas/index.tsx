@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
-import { Maximize2, Palette } from 'lucide-react'
+import { Maximize2, Palette, Pencil, Eye, EyeOff } from 'lucide-react'
 import HeatmapCanvas from './HeatmapCanvas'
 import PizarraCanvas from './PizarraCanvas'
 import PizarraToolbar from './PizarraToolbar'
@@ -25,7 +25,6 @@ export interface SomCanvasProps {
   winnerNeuron?: NeuronHit | null
   onNeuronSelect?: (neuron: NeuronHit | null) => void
   onPaletteChange?: (palette: ColorStop[]) => void
-  pizarraActiva?: boolean
 }
 
 function stopsToGradient(stops: ColorStop[]): string {
@@ -44,7 +43,6 @@ export default function SomCanvas({
   winnerNeuron,
   onNeuronSelect,
   onPaletteChange,
-  pizarraActiva = false,
 }: SomCanvasProps) {
   // ── Palette ────────────────────────────────────────────────────────────────
   const [activePaletteId, setActivePaletteId] = useState(PALETTES[0].id)
@@ -126,24 +124,32 @@ export default function SomCanvas({
   // ── Pizarra ────────────────────────────────────────────────────────────────
   const {
     layers: pizarraLayers,
-    activeId: pizarraActiveId,
-    setActiveId: setPizarraActiveId,
-    tool: pizarraTool,
-    setTool: setPizarraTool,
-    color: pizarraColor,
-    setColor: setPizarraColor,
-    width: pizarraWidth,
-    setWidth: setPizarraWidth,
-    addLayer: addPizarraLayer,
-    removeLayer: removePizarraLayer,
-    toggleLayerVisible: togglePizarraLayerVisible,
+    tool: pizarraTool, setTool: setPizarraTool,
+    color: pizarraColor, setColor: setPizarraColor,
+    width: pizarraWidth, setWidth: setPizarraWidth,
     clearLayer: clearPizarraLayer,
     undo: undoPizarra,
-    onDrawStart,
-    onDrawMove,
-    onDrawEnd,
-    cancelDraw,
+    onDrawStart, onDrawMove, onDrawEnd, cancelDraw,
   } = usePizarra()
+
+  const [pizarraEditando, setPizarraEditando] = useState(false)
+  const [pizarraVisible, setPizarraVisible] = useState(false)
+  const hasStrokes = pizarraLayers.some(l => l.strokes.length > 0)
+
+  function togglePizarraEdit() {
+    if (!pizarraEditando) {
+      setPizarraEditando(true)
+      setPizarraVisible(true)
+    } else {
+      setPizarraEditando(false)
+    }
+  }
+
+  function togglePizarraVisible() {
+    const next = !pizarraVisible
+    setPizarraVisible(next)
+    if (!next) setPizarraEditando(false)
+  }
 
   // ── Interaction (hover + selection) ───────────────────────────────────────
   const { hoveredNeuron, setHoveredNeuron, selectedNeuron, setSelectedNeuron, findNeuron } =
@@ -417,14 +423,14 @@ export default function SomCanvas({
             height: '100%',
             zIndex: 2,
             cursor: isPanning ? 'grabbing' : hoveredNeuron ? 'pointer' : 'grab',
-            pointerEvents: pizarraActiva ? 'none' : 'auto',
+            pointerEvents: pizarraEditando ? 'none' : 'auto',
           }}
         />
 
-        {/* Layer 3+ — pizarra (drawing board) */}
-        {pizarraActiva && (
+        {/* Layer 3+ — pizarra (visible cuando editando o cuando se activó la vista) */}
+        {pizarraVisible && (
           <PizarraCanvas
-            pizarraActiva={pizarraActiva}
+            pizarraActiva={pizarraEditando}
             layers={pizarraLayers}
             tool={pizarraTool}
             color={pizarraColor}
@@ -441,25 +447,55 @@ export default function SomCanvas({
           />
         )}
 
-        {/* Pizarra toolbar */}
-        {pizarraActiva && (
+        {/* Pizarra toolbar — solo en modo edición */}
+        {pizarraEditando && (
           <PizarraToolbar
-            layers={pizarraLayers}
-            activeId={pizarraActiveId}
-            setActiveId={setPizarraActiveId}
             tool={pizarraTool}
             setTool={setPizarraTool}
             color={pizarraColor}
             setColor={setPizarraColor}
             width={pizarraWidth}
             setWidth={setPizarraWidth}
-            addLayer={addPizarraLayer}
-            removeLayer={removePizarraLayer}
-            toggleLayerVisible={togglePizarraLayerVisible}
+            hasStrokes={hasStrokes}
             clearLayer={clearPizarraLayer}
             undo={undoPizarra}
           />
         )}
+
+        {/* Pizarra controls — bottom-right */}
+        <div
+          style={{ position: 'absolute', bottom: 8, right: 8, zIndex: 10 }}
+          className="flex items-center rounded-md border bg-background/90 shadow-sm backdrop-blur-sm"
+        >
+          <button
+            type="button"
+            onClick={togglePizarraEdit}
+            title={pizarraEditando ? 'Salir del modo edición' : 'Editar pizarra'}
+            className={`flex h-7 w-7 items-center justify-center rounded-l-md transition-colors ${
+              pizarraEditando
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <div className="mx-0.5 h-4 w-px bg-border" />
+          <button
+            type="button"
+            onClick={togglePizarraVisible}
+            title={pizarraVisible ? 'Ocultar dibujo' : 'Mostrar dibujo'}
+            className={`flex h-7 w-7 items-center justify-center rounded-r-md transition-colors ${
+              pizarraVisible
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            {pizarraVisible
+              ? <Eye className="h-3.5 w-3.5" />
+              : <EyeOff className="h-3.5 w-3.5" />
+            }
+          </button>
+        </div>
 
         {/* Tooltip */}
         {tooltipCursor && hoveredNeuron && (
