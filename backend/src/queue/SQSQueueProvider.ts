@@ -1,17 +1,40 @@
+import {
+  SQSClient,
+  SendMessageCommand,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+} from '@aws-sdk/client-sqs'
 import type { IQueueProvider, QueueMessage } from './IQueueProvider'
 
-// Placeholder — will use @aws-sdk/client-sqs in a future phase.
-// Set QUEUE_DRIVER=sqs and configure AWS_REGION + SQS_QUEUE_URL to activate.
 export class SQSQueueProvider implements IQueueProvider {
-  async publish(_queue: string, _message: QueueMessage): Promise<void> {
-    throw new Error('SQSQueueProvider is not yet implemented. Set QUEUE_DRIVER=redis for local development.')
+  private client: SQSClient
+  private queueUrl: string
+
+  constructor(region: string, queueUrl: string, accessKeyId?: string, secretAccessKey?: string) {
+    this.queueUrl = queueUrl
+    this.client = new SQSClient({
+      region,
+      ...(accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {}),
+    })
+  }
+
+  // The backend only publishes — consume() is reserved for the Worker
+  async publish(_queue: string, message: QueueMessage): Promise<void> {
+    await this.client.send(
+      new SendMessageCommand({
+        QueueUrl: this.queueUrl,
+        MessageBody: JSON.stringify(message),
+      }),
+    )
   }
 
   async consume(_queue: string, _handler: (message: QueueMessage) => Promise<void>): Promise<void> {
-    throw new Error('SQSQueueProvider is not yet implemented.')
+    throw new Error('consume() is handled by the Worker process, not the backend.')
   }
 
   async close(): Promise<void> {
-    // nothing to close
+    this.client.destroy()
   }
 }

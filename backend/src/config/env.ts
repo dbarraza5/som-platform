@@ -19,9 +19,11 @@ export const env = {
   QUEUE_NAME: process.env.QUEUE_NAME ?? 'som_jobs',
   TRAINING_QUEUE_NAME: process.env.TRAINING_QUEUE_NAME ?? 'training_jobs',
   INTERNAL_API_KEY: process.env.INTERNAL_API_KEY ?? 'dev-internal-api-key-change-in-production',
-  // AWS — required only when STORAGE_DRIVER=s3
+  // AWS — required only when STORAGE_DRIVER=s3 or QUEUE_DRIVER=sqs
   AWS_REGION: process.env.AWS_REGION,
   AWS_S3_BUCKET: process.env.AWS_S3_BUCKET,
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+  // SQS — required only when QUEUE_DRIVER=sqs
+  SQS_QUEUE_URL: process.env.SQS_QUEUE_URL,
 }
