@@ -2,3 +2,4 @@ redis>=5.0
 pandas>=2.0
 numpy>=1.26
 requests>=2.31
+boto3>=1.34

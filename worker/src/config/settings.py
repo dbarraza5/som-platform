@@ -14,6 +14,11 @@ class Settings:
     INTERNAL_API_KEY: str = os.environ.get("INTERNAL_API_KEY", "dev-internal-api-key-change-in-production")
     TRAINING_STATUS_POLL_INTERVAL_S: float = float(os.environ.get("TRAINING_STATUS_POLL_INTERVAL_S", "5"))
     MAX_RECOVERY_ATTEMPTS: int = int(os.environ.get("MAX_RECOVERY_ATTEMPTS", "3"))
+    # AWS — required only when STORAGE_DRIVER=s3
+    AWS_REGION: str = os.environ.get("AWS_REGION", "sa-east-1")
+    AWS_S3_BUCKET: str = os.environ.get("AWS_S3_BUCKET", "")
+    AWS_ACCESS_KEY_ID: str = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    AWS_SECRET_ACCESS_KEY: str = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
 
 settings = Settings()
