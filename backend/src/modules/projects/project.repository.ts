@@ -32,6 +32,10 @@ export const projectRepository = {
   },
 
   delete(id: string) {
-    return prisma.project.delete({ where: { id } })
+    return prisma.$transaction([
+      prisma.trainingJob.deleteMany({ where: { dataset: { projectId: id } } }),
+      prisma.dataset.deleteMany({ where: { projectId: id } }),
+      prisma.project.delete({ where: { id } }),
+    ])
   },
 }
