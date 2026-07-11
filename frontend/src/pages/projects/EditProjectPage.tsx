@@ -50,7 +50,7 @@ export default function EditProjectPage() {
                   name: project?.name ?? '',
                   description: project?.description ?? '',
                 }}
-                onSubmit={(values) => mutation.mutateAsync(values)}
+                onSubmit={async (values) => { await mutation.mutateAsync(values) }}
                 isSubmitting={mutation.isPending}
                 submitLabel="Guardar cambios"
               />

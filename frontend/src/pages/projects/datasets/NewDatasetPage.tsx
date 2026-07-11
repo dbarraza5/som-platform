@@ -37,7 +37,7 @@ export default function NewDatasetPage() {
           </CardHeader>
           <CardContent>
             <DatasetForm
-              onSubmit={(values) => mutation.mutateAsync(values)}
+              onSubmit={async (values) => { await mutation.mutateAsync(values) }}
               isSubmitting={mutation.isPending}
               submitLabel="Crear dataset"
             />

@@ -35,7 +35,7 @@ export default function NewProjectPage() {
           </CardHeader>
           <CardContent>
             <ProjectForm
-              onSubmit={(values) => mutation.mutateAsync(values)}
+              onSubmit={async (values) => { await mutation.mutateAsync(values) }}
               isSubmitting={mutation.isPending}
               submitLabel="Crear proyecto"
             />

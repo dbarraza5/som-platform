@@ -51,7 +51,7 @@ export default function EditDatasetPage() {
                   name: dataset?.name ?? '',
                   description: dataset?.description ?? '',
                 }}
-                onSubmit={(values) => mutation.mutateAsync(values)}
+                onSubmit={async (values) => { await mutation.mutateAsync(values) }}
                 isSubmitting={mutation.isPending}
                 submitLabel="Guardar cambios"
               />
