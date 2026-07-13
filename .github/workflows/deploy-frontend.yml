@@ -25,7 +25,9 @@ jobs:
 
       - name: Instalar dependencias
         working-directory: frontend
-        run: npm ci
+        run: |
+          npm ci --ignore-scripts
+          npm install @rollup/rollup-linux-x64-gnu --no-save
 
       - name: Build de producción
         working-directory: frontend
