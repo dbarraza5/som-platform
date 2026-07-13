@@ -49,7 +49,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
-          <CardDescription>Ingresa tus credenciales para acceder.</CardDescription>
+          <CardDescription>Ingresa tus credenciales para acceder :D</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
